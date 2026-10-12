@@ -1,0 +1,126 @@
+// Sauvegarde des données dans le navigateur (localStorage), pour qu'elles
+// restent là après avoir fermé l'appli — même hors-ligne.
+//
+// Note pour toi : localStorage est propre à CHAQUE navigateur/appareil.
+// Tant qu'on n'a pas ajouté de compte + synchronisation en ligne, tes fiches
+// créées sur ton téléphone ne se voient pas automatiquement sur ton ordinateur.
+
+import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS } from './state.js';
+
+const STORAGE_KEY = 'boite-fiches-data-v1';
+
+export function loadData() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p.rubriques && p.decks && p.cards) {
+        state.rubriques = p.rubriques;
+        state.decks = p.decks;
+        state.cards = p.cards;
+        // Données enregistrées avant l'arrivée de la lecture audio : le paquet
+        // d'italien de départ est réglé sur la voix italienne.
+        state.decks.forEach(d => { if (d.id === 'd-it' && d.speakLang === undefined) d.speakLang = 'it-IT'; });
+        // Corbeille : on efface pour de bon ce qui a plus de TRASH_DAYS jours.
+        const limit = Date.now() - TRASH_DAYS * 24 * 3600 * 1000;
+        state.trash = Array.isArray(p.trash) ? p.trash.filter(t => t && Date.parse(t.deletedAt) > limit) : [];
+        return;
+      }
+    }
+  } catch (e) {
+    console.error('Lecture des données impossible, on repart des données de départ.', e);
+  }
+  const s = seedData();
+  state.rubriques = s.rubriques;
+  state.decks = s.decks;
+  state.cards = s.cards;
+  state.trash = [];
+  persist();
+}
+
+export function persist() {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      rubriques: state.rubriques,
+      decks: state.decks,
+      cards: state.cards,
+      trash: state.trash
+    }));
+  } catch (e) {
+    console.error('Erreur de sauvegarde (stockage plein ou navigateur en mode privé ?)', e);
+  }
+}
+
+// ---------- Sauvegarde / restauration (fichier .json) ----------
+
+export function buildBackupJson() {
+  return JSON.stringify({
+    app: 'boite-a-fiches',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    rubriques: state.rubriques,
+    decks: state.decks,
+    cards: state.cards
+  }, null, 2);
+}
+
+// Les identifiants sont collés tels quels dans des onclick="..." générés par
+// render.js : un fichier importé pourrait y glisser du code. On n'accepte donc
+// que des identifiants "sages" (lettres, chiffres, - et _), et on reconstruit
+// chaque objet champ par champ au lieu de recopier ce que contient le fichier.
+const SAFE_ID = /^[A-Za-z0-9_-]+$/;
+const isStr = v => typeof v === 'string';
+const isId = v => isStr(v) && SAFE_ID.test(v);
+
+export function parseBackup(text) {
+  let p;
+  try { p = JSON.parse(text); }
+  catch (e) { return { ok: false, error: 'Ce fichier n’est pas lisible : ce n’est pas une sauvegarde de la Boîte à Fiches.' }; }
+  if (!p || !Array.isArray(p.rubriques) || !Array.isArray(p.decks) || !Array.isArray(p.cards)) {
+    return { ok: false, error: 'Ce fichier ne ressemble pas à une sauvegarde de la Boîte à Fiches.' };
+  }
+
+  const colorKeys = Object.keys(CALM_COLORS);
+  const seen = new Set();
+  const rubriques = [];
+  p.rubriques.forEach(function (r, i) {
+    if (!r || !isId(r.id) || !isStr(r.name) || !r.name.trim() || seen.has(r.id)) return;
+    seen.add(r.id);
+    rubriques.push({
+      id: r.id,
+      name: r.name.trim().slice(0, 80),
+      emoji: isStr(r.emoji) ? r.emoji.trim().slice(0, 8) : '',
+      color: colorKeys.includes(r.color) ? r.color : 'slate',
+      order: Number.isFinite(r.order) ? r.order : i,
+      hidden: !!r.hidden,
+      isDefault: !!r.isDefault
+    });
+  });
+
+  const rubIds = new Set(rubriques.map(r => r.id));
+  const deckIds = new Set();
+  const decks = [];
+  p.decks.forEach(function (d) {
+    if (!d || !isId(d.id) || !isStr(d.name) || !d.name.trim() || !rubIds.has(d.rubriqueId) || deckIds.has(d.id)) return;
+    deckIds.add(d.id);
+    decks.push({ id: d.id, name: d.name.trim().slice(0, 120), rubriqueId: d.rubriqueId, speakLang: SPEAK_LANGS.some(l => l.code === d.speakLang) ? d.speakLang : '' });
+  });
+
+  const cardIds = new Set();
+  const cards = [];
+  p.cards.forEach(function (c) {
+    if (!c || !isId(c.id) || !deckIds.has(c.deckId) || !isStr(c.front) || !isStr(c.back) || !c.front.trim() || !c.back.trim() || cardIds.has(c.id)) return;
+    cardIds.add(c.id);
+    cards.push({
+      id: c.id,
+      deckId: c.deckId,
+      front: c.front.trim(),
+      back: c.back.trim(),
+      box: Number.isInteger(c.box) ? Math.min(Math.max(c.box, 0), INTERVALS.length - 1) : 0,
+      nextReview: isStr(c.nextReview) && /^\d{4}-\d{2}-\d{2}$/.test(c.nextReview) ? c.nextReview : todayStr()
+    });
+  });
+
+  const dropped = (p.rubriques.length - rubriques.length) + (p.decks.length - decks.length) + (p.cards.length - cards.length);
+  return { ok: true, data: { rubriques, decks, cards }, dropped };
+}

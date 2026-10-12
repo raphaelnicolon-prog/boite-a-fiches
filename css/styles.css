@@ -1,0 +1,208 @@
+:root {
+  /* Thème sombre façon nuit/profondeur, esprit de la présentation Canva
+     (marine + turquoise vif). --bg = fond de page ; --card = surfaces
+     "élevées" (cartes, modales...), un ton plus clair que --bg pour créer
+     du relief sans compter sur des ombres, qui portent mal sur du sombre. */
+  --bg: #0a1e30;
+  --card: #142d44;
+  --ink: #eef6f9;
+  --ink-soft: #85a9bb;
+  --border: rgba(255, 255, 255, 0.09);
+
+  /* Couleur d'action générale de l'appli (boutons, liens, FAB) — distincte
+     de --revisions, qui n'est que la couleur d'affichage de la rubrique
+     "Spécial Révisions". Les deux étaient confondues avant : ça empêchait
+     de retoucher l'une sans changer l'autre. */
+  --primary: #35cdbf;
+  --primary-dark: #23a89c;
+
+  /* Palette des rubriques : tons eau/apnée (bleu, turquoise, indigo),
+     éclaircis pour bien ressortir sur les surfaces sombres. */
+  --revisions: #5b93d6;
+  --langues: #8b98e8;
+  --sage: #34d1c4;
+  --gold: #e3ab5f;
+  --slate: #93aed0;
+  --lavender: #a08ee8;
+
+  --medley1: #ff5f86;
+  --medley2: #c06bea;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --danger: #ef6a5c;
+  --success: #2fd39b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  /* Dégradé très doux, un peu plus clair en haut : juste assez pour évoquer
+     une profondeur, sans jamais devenir un vrai dégradé visible. */
+  background: linear-gradient(180deg, #0d2438 0%, #0a1e30 45%, #071a29 100%);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* #app remplit tout l'écran sur téléphone (installé ou non), et reste
+   confortablement lisible en colonne centrale sur un grand écran. */
+#app {
+  position: relative;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: calc(env(safe-area-inset-top, 0px) + 26px) 20px calc(env(safe-area-inset-bottom, 0px) + 90px);
+}
+
+.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+h1.title { font-size: 24px; font-weight: 800; margin: 4px 0 2px; }
+.subtitle { color: var(--ink-soft); font-size: 13.5px; margin-bottom: 18px; }
+.row { display: flex; align-items: center; gap: 10px; }
+.between { justify-content: space-between; }
+button { font-family: inherit; cursor: pointer; border: none; }
+.backbtn { background: none; color: var(--ink-soft); font-size: 14px; font-weight: 600; padding: 6px 0 14px; }
+.link { background: none; color: var(--ink-soft); font-size: 12.5px; text-decoration: underline; }
+.card { background: var(--card); border-radius: 16px; padding: 14px 16px; box-shadow: 0 3px 14px var(--shadow); margin-bottom: 12px; }
+.badge { width: 38px; height: 38px; border-radius: 11px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+.rub-name { font-weight: 700; font-size: 15.5px; }
+.rub-meta { color: var(--ink-soft); font-size: 12.5px; margin-top: 1px; }
+.chev { color: var(--ink-soft); font-size: 20px; }
+.hidebtn { background: none; color: var(--ink-soft); font-size: 11px; text-decoration: underline; padding: 4px; }
+.fab {
+  /* fixed = reste visible même quand on scrolle, comme un vrai bouton d'appli.
+     Le calc() recentre le décalage sur la colonne #app (pas le bord de la
+     fenêtre) quand on teste sur un grand écran ; sur téléphone #app = l'écran. */
+  position: fixed;
+  right: calc(max(0px, (100vw - 480px) / 2) + 20px + env(safe-area-inset-right, 0px));
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-size: 26px; font-weight: 600;
+  box-shadow: 0 6px 16px var(--shadow);
+  display: flex; align-items: center; justify-content: center;
+}
+.toggle-reorder { background: none; color: var(--primary); font-size: 12.5px; font-weight: 700; }
+
+/* ---- liste réordonnable (glisser-déposer des rubriques) ---- */
+#rubrique-list { position: relative; }
+.rub-item { touch-action: pan-y; } /* la transition de .rub-item est définie plus bas, avec les autres retours tactiles */
+.rub-item.dragging { transition: none; z-index: 5; box-shadow: 0 10px 22px var(--shadow); cursor: grabbing; }
+.drag-handle {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--bg); color: var(--ink-soft);
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+  cursor: grab; touch-action: none; flex-shrink: 0;
+}
+
+.deck-card { background: var(--card); border-radius: 16px; padding: 14px 16px; box-shadow: 0 3px 14px var(--shadow); margin-bottom: 12px; }
+.deck-top { height: 5px; border-radius: 4px; margin-bottom: 10px; }
+.mode-card { background: var(--card); border-radius: 16px; padding: 16px; box-shadow: 0 3px 14px var(--shadow); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+.mode-card.medley { background: linear-gradient(135deg, var(--medley1), var(--medley2)); color: #fff; }
+.mode-card.medley .mode-desc { color: rgba(255, 255, 255, 0.85); }
+.mode-title { font-weight: 700; font-size: 15.5px; }
+.mode-desc { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+.pill { border-radius: 999px; padding: 9px 16px; font-size: 13px; font-weight: 700; color: #fff; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+.modal { background: var(--card); border-radius: 18px; padding: 22px; max-width: 400px; width: 100%; max-height: 86vh; overflow: auto; }
+.modal label { display: block; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); margin: 13px 0 5px; font-weight: 700; }
+.modal input, .modal textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; color: var(--ink); font-family: inherit; font-size: 14px; }
+.modal textarea { min-height: 56px; resize: vertical; }
+.modal select { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; color: var(--ink); font-family: inherit; font-size: 14px; }
+.confirm-body { color: var(--ink); font-size: 14.5px; line-height: 1.45; margin-top: 10px; }
+.swatch-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.swatch { width: 30px; height: 30px; border-radius: 9px; border: 2px solid transparent; cursor: pointer; }
+.swatch.sel { border-color: var(--ink); }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
+.btn { border-radius: 10px; padding: 9px 16px; font-size: 13.5px; font-weight: 700; color: #fff; background: var(--primary); }
+.btn.ghost { background: none; color: var(--ink); border: 1.5px solid var(--border); }
+.btn.danger { background: none; color: var(--danger); border: 1.5px solid var(--danger); margin-right: auto; }
+.btn.danger-solid { background: var(--danger); color: #fff; }
+.speak-btn { background: var(--card); color: var(--primary); border: 1.5px solid var(--border); border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; margin: 14px 0 0; }
+.speak-btn:active { opacity: .6; }
+
+/* ---- gestion des cartes ---- */
+.list-item { background: var(--card); border-radius: 16px; padding: 12px 16px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.card-actions { flex-shrink: 0; gap: 4px; }
+/* ---- bouton rond d'en-tête + écran Réglages ---- */
+.icon-btn { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: var(--card); color: var(--ink-soft); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); }
+.settings-group { background: var(--card); border-radius: 16px; overflow: hidden; margin-bottom: 12px; }
+.settings-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; background: none; color: var(--ink); text-align: left; border-bottom: 1px solid var(--border); transition: background .15s ease; }
+.settings-row:last-child { border-bottom: none; }
+.settings-row:active { background: rgba(255, 255, 255, 0.06); }
+.settings-ic { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.settings-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.manage-link { display: block; width: 100%; background: none; color: var(--ink-soft); font-size: 13px; font-weight: 600; text-decoration: underline; padding: 14px 0 4px; text-align: center; }
+.manage-link:active { opacity: .55; }
+
+.center { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.progress { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 14px; }
+.flashcard { width: 100%; max-width: 400px; height: 240px; perspective: 1200px; cursor: pointer; }
+.flashcard-inner { position: relative; width: 100%; height: 100%; transition: transform .5s cubic-bezier(.4, .2, .2, 1); transform-style: preserve-3d; }
+.flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 16px; background: var(--card); color: var(--ink);
+  box-shadow: 0 10px 26px var(--shadow); padding: 26px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 19px; font-weight: 600; line-height: 1.4; }
+.face.back { transform: rotateY(180deg); }
+.face-tag { position: absolute; top: 12px; left: 16px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); font-weight: 700; }
+.rate-row { display: flex; gap: 12px; margin-top: 20px; }
+.rate-again { background: var(--danger); }
+.rate-easy { background: var(--success); }
+.hint { color: var(--ink-soft); font-size: 12.5px; margin-top: 12px; }
+.qtext { font-size: 19px; font-weight: 700; max-width: 380px; margin-bottom: 22px; }
+.opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 400px; }
+.opt { background: var(--card); border: 1.5px solid var(--border); border-radius: 12px; padding: 13px 10px; font-size: 14px; font-weight: 600; color: var(--ink); }
+.opt.correct { background: var(--success); color: #fff; border-color: var(--success); }
+.opt.wrong { background: var(--danger); color: #fff; border-color: var(--danger); }
+.opt.dim { opacity: .5; }
+.answer-input { width: 100%; max-width: 380px; border-radius: 12px; border: 1.5px solid var(--border); padding: 12px; font-size: 16px; background: var(--card); color: var(--ink); text-align: center; }
+.result-banner { margin-top: 14px; font-weight: 700; font-size: 14px; }
+.result-banner.ok { color: var(--success); }
+.result-banner.ko { color: var(--danger); }
+.match-wrap { display: flex; gap: 14px; width: 100%; max-width: 400px; }
+.match-col { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.match-item { background: var(--card); border: 1.5px solid var(--border); border-radius: 10px; padding: 11px 8px; font-size: 13px; font-weight: 600; text-align: center; color: var(--ink); }
+.match-item.sel { border-color: var(--primary); background: rgba(53, 205, 191, 0.16); }
+.match-item.matched { background: var(--success); color: #fff; border-color: var(--success); opacity: .7; }
+.match-item.wrongflash { background: var(--danger); color: #fff; }
+.scope-row { display: flex; gap: 10px; margin: 16px 0 6px; flex-wrap: wrap; justify-content: center; }
+.scope-opt { border-radius: 12px; padding: 12px 14px; border: 1.5px solid var(--border); background: var(--card); font-size: 13px; font-weight: 700; color: var(--ink); text-align: left; max-width: 170px; }
+.footer-row { margin-top: 30px; text-align: center; }
+
+/* ---- Retour tactile façon iOS : quand on appuie, l'élément se tasse
+   légèrement (rapide, sans rebond) ; quand on relâche, il reprend sa taille
+   avec un léger rebond (l'effet "spring" d'iOS). Le rebond vient de la
+   courbe cubic-bezier ci-dessous, qui dépasse légèrement 100% avant de
+   se stabiliser. */
+.btn, .pill, .fab, .icon-btn,
+.card, .mode-card, .deck-card, .rub-item,
+.opt, .scope-opt, .swatch, .match-item {
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), filter .18s ease, box-shadow .18s ease;
+}
+.btn:active, .pill:active, .fab:active, .icon-btn:active,
+.card:active, .mode-card:active, .deck-card:active,
+.opt:active:not(.correct):not(.wrong), .scope-opt:active, .swatch:active, .match-item:active:not(.matched) {
+  transform: scale(0.96);
+  filter: brightness(0.95);
+  transition: transform .08s ease-out, filter .08s ease-out;
+}
+/* Les cartes de rubriques ne doivent pas réagir au toucher pendant qu'on
+   les fait glisser pour les réordonner : la poignée gère déjà son propre
+   retour visuel pendant le drag (voir .dragging dans dragdrop.js). */
+.rub-item.dragging:active { transform: none; filter: none; }
+
+/* Boutons texte (liens, retour, masquer...) : un tassement les ferait
+   tressauter dans leur ligne de texte, on préfère juste les assombrir. */
+.backbtn:active, .link:active, .hidebtn:active, .toggle-reorder:active {
+  opacity: .55;
+  transition: opacity .08s ease-out;
+}
+
+@media (max-width: 420px) {
+  #app { padding: calc(env(safe-area-inset-top, 0px) + 22px) 14px calc(env(safe-area-inset-bottom, 0px) + 84px); }
+  .flashcard { height: 210px; }
+  .face { font-size: 17px; padding: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flashcard-inner, .rub-item { transition: none; }
+}
