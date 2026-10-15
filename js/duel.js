@@ -62,7 +62,9 @@ export function startDuel(opts) {
     refreshFn();
     return;
   }
-  const deck = (opts && opts.deckId && decks.find(d => d.id === opts.deckId)) || decks[Math.floor(Math.random() * decks.length)];
+  // Thème : celui demandé, sinon celui choisi dans l'écran Jouer, sinon un paquet au hasard.
+  const wanted = (opts && opts.deckId) || (opts && opts.daily ? null : state.multiDeckId);
+  const deck = (wanted && decks.find(d => d.id === wanted)) || decks[Math.floor(Math.random() * decks.length)];
   const mode = (opts && opts.mode) || state.multiMode || 'medley';
   let opponent = opts && opts.opponent;
   const kind = opponent ? (opts.skipSearch ? 'rematch' : 'friend') : 'quick';

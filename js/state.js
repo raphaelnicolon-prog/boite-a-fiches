@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '35';
+export const APP_VERSION = '36';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -65,6 +65,7 @@ export const state = {
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
   createRubriqueId: null, // rubrique choisie dans l'onglet « Créer »
+  multiDeckId: 'random', // thème des duels : 'random' ou l'id d'un paquet
   multiMode: 'medley',  // format des duels : 'medley', 'qcm', 'vf' ou 'match'
   leagueScope: 'general', // cercle du classement : 'general', 'amis' ou 'promo'
   ai: null,             // assistant IA en cours (formulaire, chargement, relecture)

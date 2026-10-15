@@ -123,6 +123,7 @@ window.App = {
   // ---- Multijoueur (prototype : adversaires simulés, voir duel.js) ----
   openMulti() { stopDuel(); state.view = 'multi'; refresh(); },
   setMultiMode(m) { state.multiMode = m; refresh(); },
+  setMultiDeck(id) { state.multiDeckId = id; refresh(); },
   quickMatch() { state.view = 'duel'; startDuel(null); },
   duelAnswer(i) { duelAnswerFn(i); },
   duelPickMatch(side, i) { pickMatch(side, i); },

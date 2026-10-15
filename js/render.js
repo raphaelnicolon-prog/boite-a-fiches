@@ -10,7 +10,7 @@ import {
 } from './state.js';
 import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE, ARTICLES } from './demo.js';
 import { todayStr } from './state.js';
-import { leagueTable, POINTS, DUEL_MODES } from './duel.js';
+import { leagueTable, POINTS, DUEL_MODES, eligibleDecks } from './duel.js';
 
 // Accord simple : pl(2, 'carte') donne « 2 cartes », pl(1, 'carte') donne « 1 carte ».
 function pl(n, one, many) {
@@ -690,8 +690,13 @@ function renderMulti() {
   const curMode = DUEL_MODES.find(x => x.id === state.multiMode) || DUEL_MODES[0];
   html += '<div class="section-label">Format de partie</div><div class="chip-row" style="margin-bottom:12px;">'
     + DUEL_MODES.map(function (x) { return '<button class="chip wide' + (x.id === curMode.id ? ' sel' : '') + '" onclick="App.setMultiMode(\'' + x.id + '\')">' + x.emoji + ' ' + x.label + '</button>'; }).join('') + '</div>';
+  const themes = eligibleDecks();
+  const curTheme = themes.find(d => d.id === state.multiDeckId) || null;
+  html += '<div class="section-label">Thème</div><div class="chip-row" style="margin-bottom:12px;">'
+    + '<button class="chip wide' + (curTheme ? '' : ' sel') + '" onclick="App.setMultiDeck(\'random\')">🔀 Au hasard</button>'
+    + themes.map(function (d) { return '<button class="chip wide' + (curTheme && curTheme.id === d.id ? ' sel' : '') + '" onclick="App.setMultiDeck(\'' + d.id + '\')">' + esc(d.name) + '</button>'; }).join('') + '</div>';
   html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;" onclick="App.quickMatch()">'
-    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Adversaire au hasard · ' + esc(curMode.desc) + '</div></div><span class="chev">›</span></button>';
+    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Adversaire au hasard · ' + (curTheme ? esc(curTheme.name) : 'thème au hasard') + ' · ' + esc(curMode.desc) + '</div></div><span class="chev">›</span></button>';
   html += '<div class="mode-card" style="cursor:pointer;" onclick="App.dailyChallenge()"><div><div class="mode-title">🎯 Défi du jour' + (dailyDone ? ' ✓' : '') + '</div>'
     + '<div class="mode-desc">' + (dailyDone ? 'Relevé aujourd\'hui · reviens demain' : 'Un Medley express · +20 points bonus') + '</div></div><span class="chev">›</span></div>';
   html += '<div class="rub-meta" style="margin-top:14px;">Prototype : adversaires et classement simulés.</div>';
