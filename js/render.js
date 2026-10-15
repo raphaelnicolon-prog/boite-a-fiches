@@ -603,7 +603,8 @@ function renderAi() {
         + (c.cloze ? '<div class="rub-meta" style="font-style:italic;">' + esc(c.cloze.text) + '</div>' : '') + '</div></div>';
     });
     const target = a.targetDeckId !== 'new' ? decksOf(a.rubriqueId).find(x => x.id === a.targetDeckId) : null;
-    html += '<div class="section-label">Ranger dans…</div><div class="chip-row">'
+    // Venu d'un paquet : la destination est évidente, pas de choix à proposer.
+    if (a.from !== 'deck') html += '<div class="section-label">Ranger dans…</div><div class="chip-row">'
       + decksOf(a.rubriqueId).map(function (d) { return '<button class="chip wide' + (target && target.id === d.id ? ' sel' : '') + '" onclick="App.setAiTarget(\'' + d.id + '\')">' + esc(d.name) + '</button>'; }).join('')
       + '<button class="chip wide' + (target ? '' : ' sel') + '" onclick="App.setAiTarget(\'new\')">+ Nouveau paquet</button></div>';
     html += '<div class="row" style="margin-top:16px;"><button class="btn" onclick="App.addAi()"' + (nb ? '' : ' disabled style="opacity:.4;"') + '>Ajouter ' + pl(nb, 'carte') + (target ? ' à « ' + esc(target.name) + ' »' : ' en nouveau paquet') + '</button></div>';
