@@ -165,13 +165,14 @@ window.App = {
   },
 
   // ---- Assistant IA (simulé : voir demo.js) ----
-  openAi(rubriqueId, source, from) {
-    state.ai = { rubriqueId, source: source || 'prompt', from: from || 'rubrique', prompt: '', phase: 'form', error: '', result: null, selected: [] };
+  openAi(rubriqueId, source, from, deckId) {
+    // deckId : si on vient de l'écran d'un paquet, les cartes iront dans CE paquet (sinon « nouveau paquet »).
+    state.ai = { rubriqueId, source: source || 'prompt', from: from || 'rubrique', targetDeckId: deckId || 'new', prompt: '', phase: 'form', error: '', result: null, selected: [] };
     state.view = 'ai'; refresh();
   },
   leaveAi() {
-    const fromCreate = state.ai && state.ai.from === 'create';
-    state.view = fromCreate ? 'create' : 'rubrique';
+    const from = state.ai && state.ai.from;
+    state.view = from === 'create' ? 'create' : (from === 'deck' ? 'modes' : 'rubrique');
     state.ai = null; refresh();
   },
   setAiSource(src) {
@@ -238,6 +239,7 @@ window.App = {
       persist(); refresh();
     }, 1900);
   },
+  setAiTarget(id) { if (state.ai) { state.ai.targetDeckId = id; refresh(); } },
   toggleAi(i) {
     const a = state.ai;
     if (!a || a.phase !== 'review') return;
@@ -249,8 +251,11 @@ window.App = {
     if (!a || a.phase !== 'review' || a.selected.length === 0) return;
     const res = a.result;
     const stamp = Date.now();
-    const deckId = 'd-' + stamp;
-    state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang });
+    // Soit un paquet existant choisi par l'utilisateur, soit un nouveau paquet.
+    const existing = a.targetDeckId !== 'new' ? state.decks.find(d => d.id === a.targetDeckId && d.rubriqueId === a.rubriqueId) : null;
+    const deckId = existing ? existing.id : 'd-' + stamp;
+    if (existing) { if (!existing.speakLang && res.speakLang) existing.speakLang = res.speakLang; }
+    else state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang });
     a.selected.slice().sort((x, y) => x - y).forEach((i, k) => {
       const c = res.cards[i];
       state.cards.push(Object.assign({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() },

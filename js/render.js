@@ -261,8 +261,8 @@ function addCardsBlock(d) {
   return '<div class="section-label">Ajouter des cartes</div><div class="settings-group">'
     + settingsRow('✏️', 'Une carte', 'Recto et verso, à la main', 'App.openAddCard()')
     + settingsRow('📋', 'Plusieurs cartes', 'Colle une liste ou importe un fichier .csv / .txt', 'App.openBulk()')
-    + settingsRow('✨', 'Générer avec l\'IA', aiQuotaText() + ' · crée un nouveau paquet', 'App.openAi(\'' + d.rubriqueId + '\')')
-    + settingsRow('📝', 'Coller un cours', 'Les définitions deviennent des cartes', 'App.openAi(\'' + d.rubriqueId + '\',\'text\')')
+    + settingsRow('✨', 'Générer avec l\'IA', aiQuotaText() + ' · cartes ajoutées à ce paquet', 'App.openAi(\'' + d.rubriqueId + '\',\'prompt\',\'deck\',\'' + d.id + '\')')
+    + settingsRow('📝', 'Coller un cours', 'Les définitions deviennent des cartes', 'App.openAi(\'' + d.rubriqueId + '\',\'text\',\'deck\',\'' + d.id + '\')')
     + '</div>';
 }
 
@@ -583,7 +583,8 @@ function partnerCard(r) {
 function renderAi() {
   const a = state.ai;
   const r = state.rubriques.find(x => x.id === a.rubriqueId);
-  let html = '<button class="backbtn" onclick="App.leaveAi()">‹ ' + (a.from === 'create' ? 'Créer' : esc(r ? r.name : 'Retour')) + '</button>';
+  const backDeck = a.from === 'deck' ? state.decks.find(x => x.id === a.targetDeckId) : null;
+  let html = '<button class="backbtn" onclick="App.leaveAi()">‹ ' + (a.from === 'create' ? 'Créer' : (backDeck ? esc(backDeck.name) : esc(r ? r.name : 'Retour'))) + '</button>';
   html += '<div class="eyebrow">Assistant IA</div>';
 
   if (a.phase === 'loading') {
@@ -601,7 +602,11 @@ function renderAi() {
         + '<div class="rub-name">' + esc(c.front) + ' <span style="color:var(--ink-soft);font-weight:500;">→ ' + esc(c.back) + '</span></div>'
         + (c.cloze ? '<div class="rub-meta" style="font-style:italic;">' + esc(c.cloze.text) + '</div>' : '') + '</div></div>';
     });
-    html += '<div class="row" style="margin-top:16px;"><button class="btn" onclick="App.addAi()"' + (nb ? '' : ' disabled style="opacity:.4;"') + '>Ajouter ' + pl(nb, 'carte') + ' en nouveau paquet</button></div>';
+    const target = a.targetDeckId !== 'new' ? decksOf(a.rubriqueId).find(x => x.id === a.targetDeckId) : null;
+    html += '<div class="section-label">Ranger dans…</div><div class="chip-row">'
+      + decksOf(a.rubriqueId).map(function (d) { return '<button class="chip wide' + (target && target.id === d.id ? ' sel' : '') + '" onclick="App.setAiTarget(\'' + d.id + '\')">' + esc(d.name) + '</button>'; }).join('')
+      + '<button class="chip wide' + (target ? '' : ' sel') + '" onclick="App.setAiTarget(\'new\')">+ Nouveau paquet</button></div>';
+    html += '<div class="row" style="margin-top:16px;"><button class="btn" onclick="App.addAi()"' + (nb ? '' : ' disabled style="opacity:.4;"') + '>Ajouter ' + pl(nb, 'carte') + (target ? ' à « ' + esc(target.name) + ' »' : ' en nouveau paquet') + '</button></div>';
     return html;
   }
 
