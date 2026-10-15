@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '27';
+export const APP_VERSION = '28';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -54,7 +54,7 @@ export const state = {
   showBulk: false,
   trash: [],            // éléments supprimés récemment (voir app.js : corbeille de 30 jours)
   stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
-  meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
+  meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
   profile: { pseudo: 'Toi', avatar: '🙂' }, // pseudo et avatar affichés dans les duels et le classement
   showProfile: false,
   showFeedback: false,

@@ -2,7 +2,7 @@
 // fois qu'elle a été ouverte au moins une fois. Change CACHE_VERSION quand tu
 // modifies les fichiers ci-dessous, pour forcer les téléphones à récupérer
 // la nouvelle version au lieu de garder l'ancienne en cache indéfiniment.
-const CACHE_VERSION = 'v27';
+const CACHE_VERSION = 'v28';
 const CACHE_NAME = 'boite-a-fiches-' + CACHE_VERSION;
 
 const APP_SHELL = [
@@ -45,7 +45,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
+    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((response) => {
         const copy = response.clone();

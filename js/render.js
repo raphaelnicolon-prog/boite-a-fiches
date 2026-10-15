@@ -89,6 +89,7 @@ function renderSettings() {
   const rem = state.meta.reminder;
   html += '<div class="eyebrow" style="margin:0 0 8px;">Profil et rappel</div><div class="settings-group">'
     + settingsRow(esc(state.profile.avatar), 'Mon profil', 'Pseudo : ' + esc(state.profile.pseudo) + ' · avatar', 'App.openProfile()')
+    + settingsRow('📳', 'Vibrations au toucher', (state.meta.haptics ? 'Activées' : 'Désactivées') + ' · Android uniquement', 'App.toggleHaptics()')
     + '</div><div class="card"><div class="row between"><div><div class="mode-title">⏰ Rappel quotidien</div><div class="mode-desc">Une bannière sur l\'accueil à l\'heure choisie, tant que ton objectif n\'est pas atteint.</div></div>'
     + '<button class="chip' + (rem.on ? ' sel' : '') + '" onclick="App.toggleReminder()">' + (rem.on ? 'Activé' : 'Désactivé') + '</button></div>'
     + '<div class="row" style="margin-top:12px;"><span class="rub-meta" style="margin:0;">Heure</span><input type="time" class="time-input" id="reminder-time" value="' + esc(rem.time) + '" onchange="App.setReminderTime(this.value)"/></div>'

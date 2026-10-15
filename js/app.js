@@ -274,7 +274,7 @@ window.App = {
         const d = demoDataset();
         state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
         state.stats = d.stats; state.multi = d.multi; state.social = d.social;
-        state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, reminder: state.meta.reminder };
+        state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, haptics: state.meta.haptics, reminder: state.meta.reminder };
         state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
         persist(); refresh();
       }
@@ -524,6 +524,8 @@ window.App = {
     persist(); refresh();
   },
   closeProfile() { state.showProfile = false; refresh(); },
+
+  toggleHaptics() { state.meta.haptics = !state.meta.haptics; if (state.meta.haptics && navigator.vibrate) navigator.vibrate(12); persist(); refresh(); },
 
   // ---- Rappel quotidien (bannière sur l'accueil, pas de notification push sans serveur) ----
   toggleReminder() {
@@ -833,11 +835,40 @@ window.App = {
 // tactile vide sur tout le document suffit à le convaincre de l'appliquer.
 document.addEventListener('touchstart', function () {}, { passive: true });
 
+// Petite vibration au toucher (Android ; Safari sur iPhone ne l'autorise pas). Désactivable dans
+// les Réglages, et ignorée si l'utilisateur a demandé de réduire les animations.
+document.addEventListener('pointerdown', function (e) {
+  if (!state.meta.haptics || !navigator.vibrate) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (e.target.closest && e.target.closest('button, .card, .mode-card, .deck-card, .opt, .match-item, .fab, .settings-row, .chip, .ai-btn, .article, .list-item.tap')) navigator.vibrate(8);
+}, { passive: true });
+
+// Indicateur « hors-ligne » : ajouté/retiré sans redessiner l'écran (pour ne rien interrompre).
+function syncOfflinePill() {
+  const existing = document.getElementById('offline-pill');
+  if (!navigator.onLine && !existing) document.body.insertAdjacentHTML('beforeend', '<div class="offline-pill" id="offline-pill">Hors-ligne · tout fonctionne</div>');
+  if (navigator.onLine && existing) existing.remove();
+}
+window.addEventListener('online', syncOfflinePill);
+window.addEventListener('offline', syncOfflinePill);
+
 // ---- Démarrage de l'appli ----
 loadData();
 ensureWeek();
 setRefresh(refresh);
 refresh();
+syncOfflinePill();
+
+// Raccourcis de l'icône (voir manifest.json) : ./?action=daily, resume ou multi.
+(function handleShortcut() {
+  const action = new URLSearchParams(location.search).get('action');
+  if (!action) return;
+  history.replaceState(null, '', location.pathname);
+  if (!state.meta.welcomed) return;
+  if (action === 'daily') window.App.dailyChallenge();
+  else if (action === 'multi') window.App.openMulti();
+  else if (action === 'resume' && allDueCards().length > 0) window.App.startFlash(null, null, 'all-due');
+})();
 
 if ('serviceWorker' in navigator) {
   // Quand une nouvelle version prend le relais, on propose de recharger au lieu de
