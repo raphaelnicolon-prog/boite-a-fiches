@@ -4,7 +4,7 @@
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek } from './state.js';
-import { generateDeck, demoDataset, AI_TOPICS, DEMO_PEOPLE } from './demo.js';
+import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render, friendResultsHtml } from './render.js';
@@ -132,6 +132,41 @@ window.App = {
     state.view = 'ai'; refresh();
   },
   leaveAi() { state.view = 'rubrique'; state.ai = null; refresh(); },
+  setAiSource(src) {
+    if (!state.ai) return;
+    // On garde ce qui a été saisi avant de changer d'onglet.
+    const t = document.getElementById('ai-text'); if (t) state.ai.text = t.value;
+    const ti = document.getElementById('ai-title'); if (ti) state.ai.title = ti.value;
+    state.ai.source = src; state.ai.error = '';
+    refresh();
+  },
+  generateFromText() {
+    const a = state.ai;
+    if (!a) return;
+    const t = document.getElementById('ai-text'); a.text = t ? t.value : a.text;
+    const ti = document.getElementById('ai-title'); a.title = ti ? ti.value : a.title;
+    if (!a.text || a.text.trim().length < 20) { a.error = 'Colle d\'abord un extrait de cours (quelques lignes).'; refresh(); return; }
+    const result = generateFromText(a.text, a.title);
+    if (!result) { a.error = 'Je n\'ai trouvé aucune définition. Écris des lignes du type « Terme : définition » ou « X est … ».'; refresh(); return; }
+    a.error = ''; a.phase = 'loading'; refresh();
+    setTimeout(() => {
+      if (state.ai !== a) return;
+      a.result = result; a.selected = result.cards.map((_, i) => i); a.phase = 'review';
+      refresh(); // analyse locale : elle ne consomme pas de génération gratuite
+    }, 900);
+  },
+  loadTextFile(input) {
+    const file = input.files && input.files[0];
+    if (!file || !state.ai) return;
+    if (file.size > 300000) { askConfirm({ title: 'Fichier trop volumineux', body: 'Choisis un fichier texte de moins de 300 Ko.', label: '' }); return; }
+    file.text().then(txt => {
+      input.value = '';
+      if (!state.ai) return;
+      state.ai.text = txt; state.ai.source = 'text';
+      if (!state.ai.title) state.ai.title = file.name.replace(/\.[^.]+$/, '');
+      refresh();
+    });
+  },
   pickAiTopic(i) {
     const t = AI_TOPICS_LIST[i];
     if (!t || !state.ai) return;
@@ -176,7 +211,8 @@ window.App = {
     state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang });
     a.selected.slice().sort((x, y) => x - y).forEach((i, k) => {
       const c = res.cards[i];
-      state.cards.push({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, cloze: { text: c.cloze.text, answer: c.cloze.answer }, box: 0, nextReview: todayStr() });
+      state.cards.push(Object.assign({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() },
+        c.cloze ? { cloze: { text: c.cloze.text, answer: c.cloze.answer } } : {}));
     });
     state.currentRubriqueId = a.rubriqueId;
     state.ai = null;

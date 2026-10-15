@@ -514,13 +514,32 @@ function renderAi() {
       const on = a.selected.includes(i);
       html += '<div class="ai-item' + (on ? ' on' : '') + '" onclick="App.toggleAi(' + i + ')"><span class="ai-check">' + (on ? '✓' : '') + '</span><div style="min-width:0;">'
         + '<div class="rub-name">' + esc(c.front) + ' <span style="color:var(--ink-soft);font-weight:500;">→ ' + esc(c.back) + '</span></div>'
-        + '<div class="rub-meta" style="font-style:italic;">' + esc(c.cloze.text) + '</div></div></div>';
+        + (c.cloze ? '<div class="rub-meta" style="font-style:italic;">' + esc(c.cloze.text) + '</div>' : '') + '</div></div>';
     });
     html += '<div class="row" style="margin-top:16px;"><button class="btn" onclick="App.addAi()"' + (nb ? '' : ' disabled style="opacity:.4;"') + '>Ajouter ' + nb + ' carte(s) en nouveau paquet</button></div>';
     return html;
   }
 
-  html += '<h1 class="title">Décris ce que tu veux réviser</h1>';
+  const src = a.source || 'prompt';
+  html += '<h1 class="title">Crée un paquet en un instant</h1>';
+  html += '<div class="chip-row" style="margin:6px 0 14px;">'
+    + '<button class="chip wide' + (src === 'prompt' ? ' sel' : '') + '" onclick="App.setAiSource(\'prompt\')">✨ Par consigne</button>'
+    + '<button class="chip wide' + (src === 'text' ? ' sel' : '') + '" onclick="App.setAiSource(\'text\')">📝 À partir d\'un texte</button></div>';
+
+  if (src === 'text') {
+    html += '<div class="subtitle">Colle un extrait de cours : les définitions deviennent des cartes, avec une phrase à trous quand c\'est possible.</div>';
+    html += '<textarea class="answer-input" style="max-width:none;text-align:left;min-height:170px;font-size:14px;" id="ai-text" placeholder="Matrice SWOT : analyse des forces, faiblesses, opportunités et menaces.&#10;Un livrable désigne un résultat concret remis au client.&#10;MECE - principe consistant à structurer sans chevauchement ni oubli.">' + esc(a.text || '') + '</textarea>';
+    html += '<input class="answer-input" style="max-width:none;text-align:left;margin-top:10px;" id="ai-title" placeholder="Nom du paquet (facultatif)" value="' + esc(a.title || '') + '" autocomplete="off"/>';
+    if (a.error) html += '<div class="result-banner ko" style="font-weight:600;">' + esc(a.error) + '</div>';
+    html += '<div class="row" style="margin-top:14px;"><button class="btn" onclick="App.generateFromText()">Analyser le texte</button>'
+      + '<label class="btn ghost file-btn">Importer un fichier .txt<input type="file" accept=".txt,.md,text/plain" style="display:none;" onchange="App.loadTextFile(this)"/></label></div>';
+    html += '<div class="eyebrow" style="margin:20px 0 8px;">Bientôt</div><div class="settings-group">'
+      + '<div class="settings-row" style="opacity:.55;"><span class="settings-ic">📄</span><span class="settings-txt"><span class="mode-title">Importer un PDF ou des slides</span><span class="mode-desc">Extraction du texte, puis génération (phase 2)</span></span></div>'
+      + '<div class="settings-row" style="opacity:.55;"><span class="settings-ic">📷</span><span class="settings-txt"><span class="mode-title">Photo de notes manuscrites</span><span class="mode-desc">Lecture de l\'écriture par une IA vision (phase 2, Premium)</span></span></div></div>';
+    html += '<div class="rub-meta" style="margin-top:14px;">Analyse simple, locale et gratuite : elle repère les définitions. Une vraie IA comprendrait le sens, résumerait et générerait aussi des QCM plus fins.</div>';
+    return html;
+  }
+
   html += '<div class="subtitle">L\'IA crée un paquet complet : cartes, QCM et phrases à trous en contexte.</div>';
   html += '<input class="answer-input" style="max-width:none;text-align:left;" id="ai-prompt" placeholder="ex : Vocabulaire du football en anglais" value="' + esc(a.prompt) + '" autocomplete="off"/>';
   if (a.error) html += '<div class="result-banner ko" style="font-weight:600;">' + esc(a.error) + '</div>';

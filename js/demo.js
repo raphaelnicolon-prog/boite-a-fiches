@@ -269,3 +269,53 @@ export const ARTICLES = [
     summary: 'Orienter un comportement sans rien interdire, c\'est la théorie du « nudge ».',
     body: 'Popularisé par Thaler et Sunstein (Nudge, 2008), le nudge oriente un choix par un petit changement de contexte, sans contrainte : option par défaut, rappel, preuve sociale, progression visible. Ici : la série de jours, l\'objectif quotidien, le rappel à l\'heure choisie ou la ligue entre amis sont des nudges. Bien conçus, ils aident à tenir une habitude ; mal utilisés, ils peuvent devenir manipulateurs, d\'où l\'importance de rester transparent et de ne jamais culpabiliser.' }
 ];
+
+// ---------- Analyse d'un texte de cours (locale, sans IA) ----------
+// Repère des définitions (« Terme : définition », « X est / désigne / signifie... ») et en tire des
+// cartes, avec une phrase à trous quand c'est possible. C'est une analyse simple, pas de l'IA :
+// une vraie IA comprendrait le sens, résumerait et irait bien plus loin.
+const STOP = new Set(['alors', 'aussi', 'autres', 'avant', 'avec', 'cette', 'comme', 'dans', 'donc', 'elles', 'entre', 'leurs', 'mais', 'même', 'notre', 'plus', 'pour', 'sans', 'selon', 'sont', 'toute', 'toutes', 'tous', 'votre', 'quand', 'ainsi', 'chaque', 'depuis', 'permet', 'consiste']);
+const GRAM_ARTICLES = ['le', 'la', 'les', 'un', 'une', 'des', 'du', 'l\''];
+
+function lowerFirst(txt) {
+  const first = txt.split(/[\s']/)[0].toLowerCase();
+  return GRAM_ARTICLES.includes(first) || GRAM_ARTICLES.includes(first + '\'') ? txt.charAt(0).toLowerCase() + txt.slice(1) : txt;
+}
+
+function makeCloze(sentence) {
+  const clean = sentence.replace(/\s+/g, ' ').trim();
+  if (clean.length > 220) return null;
+  const words = clean.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]{5,}/g) || [];
+  const best = words.filter(w => !STOP.has(w.toLowerCase())).sort((a, b) => b.length - a.length)[0];
+  if (!best) return null;
+  const re = new RegExp('(^|[^A-Za-zÀ-ÿ])' + best.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-zÀ-ÿ])', 'i');
+  if (!re.test(clean)) return null;
+  return { text: clean.replace(re, (m, pre) => pre + '____'), answer: best };
+}
+
+export function generateFromText(text, title) {
+  const cards = [];
+  const seen = new Set();
+  const add = (front, back) => {
+    const key = front.toLowerCase();
+    if (seen.has(key) || cards.length >= 15) return;
+    seen.add(key);
+    const cz = makeCloze(back);
+    cards.push({ front, back, cloze: cz });
+  };
+  const defRe = /^\s*(?:[-•*]+\s*|\d+[.)]\s*)?([^:—–-]{2,60}?)\s*(?::|—|–|\s-\s)\s*(.{12,})$/;
+  const sentRe = /^(.{3,70}?)\s+(est|sont|désigne|désignent|signifie|correspond à)\s+(.{12,})$/i;
+  String(text || '').split(/\r?\n/).forEach(function (line) {
+    const l = line.trim();
+    if (l.length < 15) return;
+    const m = l.match(defRe);
+    if (m && m[1].split(' ').length <= 8) { add('Que signifie « ' + m[1].trim() + ' » ?', m[2].trim().replace(/^./, c => c.toUpperCase())); return; }
+    (l.match(/[^.!?]+[.!?]?/g) || []).forEach(function (sentence) {
+      const s2 = sentence.trim();
+      const sm = s2.match(sentRe);
+      if (sm && sm[1].split(' ').length <= 8) add('Définis : ' + lowerFirst(sm[1].trim()), s2.replace(/\s+/g, ' '));
+    });
+  });
+  if (cards.length === 0) return null;
+  return { title: (title || '').trim() || 'Mon cours (analyse)', speakLang: '', cards };
+}
