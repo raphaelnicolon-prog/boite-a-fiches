@@ -3,7 +3,8 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft } from './state.js';
+import { generateDeck, demoDataset, AI_TOPICS } from './demo.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render } from './render.js';
 import { enableReorder } from './dragdrop.js';
@@ -62,6 +63,8 @@ function prepareCurrentCard(s) {
   if (cardMode === 'qcm') s.qcmOptions = buildQcmOptions(card);
 }
 
+const AI_TOPICS_LIST = AI_TOPICS;
+
 // Boîte de confirmation à l'écran (remplace confirm() du navigateur, trop
 // discret et parfois absent sur téléphone). Sans 'label' : simple message + OK.
 function askConfirm(opts) {
@@ -83,6 +86,87 @@ window.App = {
     if (!GOAL_CHOICES.includes(n)) return;
     state.stats.goal = n;
     persist(); refresh();
+  },
+
+  // ---- Assistant IA (simulé : voir demo.js) ----
+  openAi(rubriqueId) {
+    state.ai = { rubriqueId, prompt: '', phase: 'form', error: '', result: null, selected: [] };
+    state.view = 'ai'; refresh();
+  },
+  leaveAi() { state.view = 'rubrique'; state.ai = null; refresh(); },
+  pickAiTopic(i) {
+    const t = AI_TOPICS_LIST[i];
+    if (!t || !state.ai) return;
+    state.ai.prompt = t.prompt;
+    const input = document.getElementById('ai-prompt'); // pas de refresh : on garde le focus
+    if (input) input.value = t.prompt;
+  },
+  generateAi() {
+    const a = state.ai;
+    if (!a) return;
+    const input = document.getElementById('ai-prompt');
+    if (input) a.prompt = input.value.trim();
+    if (!a.prompt) { a.error = 'Écris d\'abord ce que tu veux réviser.'; refresh(); return; }
+    if (aiLeft() <= 0) { state.showPaywall = true; refresh(); return; }
+    const result = generateDeck(a.prompt);
+    if (!result) {
+      a.error = 'Dans cette démo, l\'IA connaît quelques thèmes (football, cuisine italienne, voyage, conseil). Choisis une idée ci-dessous.';
+      refresh(); return;
+    }
+    a.error = ''; a.phase = 'loading'; refresh();
+    setTimeout(() => {
+      if (state.ai !== a) return; // l'utilisateur est parti entre-temps
+      a.result = result; a.selected = result.cards.map((_, i) => i); a.phase = 'review';
+      const t = todayStr();
+      state.meta.aiDays[t] = (state.meta.aiDays[t] || 0) + 1;
+      state.meta.aiTotal++;
+      persist(); refresh();
+    }, 1900);
+  },
+  toggleAi(i) {
+    const a = state.ai;
+    if (!a || a.phase !== 'review') return;
+    a.selected = a.selected.includes(i) ? a.selected.filter(x => x !== i) : a.selected.concat(i);
+    refresh();
+  },
+  addAi() {
+    const a = state.ai;
+    if (!a || a.phase !== 'review' || a.selected.length === 0) return;
+    const res = a.result;
+    const stamp = Date.now();
+    const deckId = 'd-' + stamp;
+    state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang });
+    a.selected.slice().sort((x, y) => x - y).forEach((i, k) => {
+      const c = res.cards[i];
+      state.cards.push({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, cloze: { text: c.cloze.text, answer: c.cloze.answer }, box: 0, nextReview: todayStr() });
+    });
+    state.currentRubriqueId = a.rubriqueId;
+    state.ai = null;
+    persist();
+    this.openDeck(deckId);
+  },
+
+  // ---- Premium (démo : aucun paiement) ----
+  openPaywall() { state.showPaywall = true; refresh(); },
+  closePaywall() { state.showPaywall = false; refresh(); },
+  upgradePremium() { state.meta.premium = true; state.showPaywall = false; persist(); refresh(); },
+  downgradePremium() { state.meta.premium = false; state.showPaywall = false; persist(); refresh(); },
+
+  // ---- Données de démonstration ----
+  loadDemo() {
+    askConfirm({
+      title: 'Charger les données de démo ?',
+      body: 'Tes rubriques, paquets et cartes actuels seront remplacés par un jeu d\'exemple complet (révisions et italien), avec une série de jours déjà en cours. Exporte tes fiches avant si tu veux les garder.',
+      label: 'Charger', danger: true,
+      onConfirm() {
+        const d = demoDataset();
+        state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
+        state.stats = d.stats; state.multi = d.multi; state.social = d.social;
+        state.meta = { premium: false, aiDays: {}, aiTotal: 0 };
+        state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
+        persist(); refresh();
+      }
+    });
   },
 
   // ---- Confirmation ----
@@ -488,7 +572,9 @@ window.App = {
   checkTexte() {
     const s = state.session;
     const card = s.queue[s.index];
-    s.texteCorrect = normalize(s.texteInput) === normalize(card.back);
+    // Phrase à trous (carte générée par l'IA) : on attend le mot manquant, pas le verso.
+    const expected = card.cloze ? card.cloze.answer : card.back;
+    s.texteCorrect = normalize(s.texteInput) === normalize(expected);
     s.texteRevealed = true;
     refresh();
   },

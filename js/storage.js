@@ -25,6 +25,31 @@ export function sanitizeStats(raw) {
   return stats;
 }
 
+export function sanitizeMeta(raw) {
+  const m = { premium: false, aiDays: {}, aiTotal: 0 };
+  if (!raw || typeof raw !== 'object') return m;
+  m.premium = raw.premium === true;
+  if (Number.isInteger(raw.aiTotal) && raw.aiTotal >= 0) m.aiTotal = raw.aiTotal;
+  if (raw.aiDays && typeof raw.aiDays === 'object') {
+    Object.keys(raw.aiDays).sort().slice(-30).forEach(function (k) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Number.isInteger(raw.aiDays[k]) && raw.aiDays[k] >= 0) m.aiDays[k] = raw.aiDays[k];
+    });
+  }
+  return m;
+}
+export function sanitizeMulti(raw) {
+  const m = { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 };
+  if (!raw || typeof raw !== 'object') return m;
+  ['weekPoints', 'total', 'played', 'wins'].forEach(k => { if (Number.isInteger(raw[k]) && raw[k] >= 0) m[k] = raw[k]; });
+  if (typeof raw.weekKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.weekKey)) m.weekKey = raw.weekKey;
+  return m;
+}
+export function sanitizeSocial(raw) {
+  const s = { friends: [], pending: {} };
+  if (raw && Array.isArray(raw.friends)) s.friends = raw.friends.filter(n => typeof n === 'string' && n.length > 0 && n.length <= 30).slice(0, 50);
+  return s;
+}
+
 export function loadData() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -41,6 +66,9 @@ export function loadData() {
         const limit = Date.now() - TRASH_DAYS * 24 * 3600 * 1000;
         state.trash = Array.isArray(p.trash) ? p.trash.filter(t => t && Date.parse(t.deletedAt) > limit) : [];
         state.stats = sanitizeStats(p.stats);
+        state.meta = sanitizeMeta(p.meta);
+        state.multi = sanitizeMulti(p.multi);
+        state.social = sanitizeSocial(p.social);
         return;
       }
     }
@@ -53,6 +81,9 @@ export function loadData() {
   state.cards = s.cards;
   state.trash = [];
   state.stats = sanitizeStats(null);
+  state.meta = sanitizeMeta(null);
+  state.multi = sanitizeMulti(null);
+  state.social = sanitizeSocial(null);
   persist();
 }
 
@@ -63,7 +94,10 @@ export function persist() {
       decks: state.decks,
       cards: state.cards,
       trash: state.trash,
-      stats: state.stats
+      stats: state.stats,
+      meta: state.meta,
+      multi: state.multi,
+      social: { friends: state.social.friends }
     }));
   } catch (e) {
     console.error('Erreur de sauvegarde (stockage plein ou navigateur en mode privé ?)', e);
@@ -131,11 +165,13 @@ export function parseBackup(text) {
   p.cards.forEach(function (c) {
     if (!c || !isId(c.id) || !deckIds.has(c.deckId) || !isStr(c.front) || !isStr(c.back) || !c.front.trim() || !c.back.trim() || cardIds.has(c.id)) return;
     cardIds.add(c.id);
+    const cz = c.cloze && isStr(c.cloze.text) && isStr(c.cloze.answer) && c.cloze.text.includes('____') ? { text: c.cloze.text.slice(0, 300), answer: c.cloze.answer.slice(0, 100) } : null;
     cards.push({
       id: c.id,
       deckId: c.deckId,
       front: c.front.trim(),
       back: c.back.trim(),
+      ...(cz ? { cloze: cz } : {}),
       box: Number.isInteger(c.box) ? Math.min(Math.max(c.box, 0), INTERVALS.length - 1) : 0,
       nextReview: isStr(c.nextReview) && /^\d{4}-\d{2}-\d{2}$/.test(c.nextReview) ? c.nextReview : todayStr()
     });

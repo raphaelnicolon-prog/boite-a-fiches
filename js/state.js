@@ -51,6 +51,12 @@ export const state = {
   showBulk: false,
   trash: [],            // éléments supprimés récemment (voir app.js : corbeille de 30 jours)
   stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
+  meta: { premium: false, aiDays: {}, aiTotal: 0 }, // abonnement (démo) et générations IA utilisées par jour
+  multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 }, // points de ligue du joueur
+  social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
+  ai: null,             // assistant IA en cours (formulaire, chargement, relecture)
+  duel: null,           // partie multijoueur en cours (voir duel.js)
+  showPaywall: false,
   confirmDialog: null,  // { title, body, label, danger, onConfirm } : boîte de confirmation à l'écran
   pendingRubColor: 'sage', // couleur en cours de sélection dans la modale rubrique (ajout ou modif)
   session: null
@@ -225,4 +231,63 @@ export function last7Days() {
     out.push({ date: key, count: state.stats.days[key] || 0, letter: letters[d.getDay()], isToday: i === 0 });
   }
   return out;
+}
+
+// ---------- Freemium, ligue, niveau, badges (prototype) ----------
+export const FREE_AI_PER_DAY = 3;
+
+// Générations IA encore gratuites aujourd'hui (Infinity si Premium).
+export function aiLeft() {
+  if (state.meta.premium) return Infinity;
+  return Math.max(0, FREE_AI_PER_DAY - (state.meta.aiDays[todayStr()] || 0));
+}
+
+// Lundi de la semaine en cours : sert d'identifiant à la ligue hebdomadaire.
+export function weekKey() {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return localDateStr(d);
+}
+export function daysLeftInWeek() {
+  return 7 - ((new Date().getDay() + 6) % 7);
+}
+// Nouvelle semaine : les points de ligue repartent de zéro (le total est gardé).
+export function ensureWeek() {
+  if (state.multi.weekKey !== weekKey()) {
+    state.multi.weekKey = weekKey();
+    state.multi.weekPoints = 0;
+  }
+}
+
+export function totalReviews() {
+  return Object.values(state.stats.days).reduce((a, b) => a + b, 0);
+}
+
+export function longestStreak() {
+  const keys = Object.keys(state.stats.days).filter(k => state.stats.days[k] > 0).sort();
+  let best = 0, cur = 0, prev = null;
+  keys.forEach(function (k) {
+    const t = Date.parse(k + 'T12:00:00');
+    cur = prev !== null && Math.round((t - prev) / 86400000) === 1 ? cur + 1 : 1;
+    best = Math.max(best, cur);
+    prev = t;
+  });
+  return best;
+}
+
+// Niveau du joueur : monte avec les cartes révisées et les points de ligue.
+export function playerLevel() {
+  const xp = totalReviews() + state.multi.total * 2;
+  return { level: 1 + Math.floor(Math.sqrt(xp / 20)), xp };
+}
+
+export function badgeList() {
+  return [
+    { emoji: '🔥', label: 'Série de 3 jours', earned: longestStreak() >= 3 },
+    { emoji: '📚', label: '100 cartes révisées', earned: totalReviews() >= 100 },
+    { emoji: '✨', label: 'Pionnier de l\'IA', earned: state.meta.aiTotal >= 1 },
+    { emoji: '⚔️', label: 'Premier duel', earned: state.multi.played >= 1 },
+    { emoji: '🏆', label: 'Première victoire', earned: state.multi.wins >= 1 },
+    { emoji: '👥', label: 'Premier ami', earned: state.social.friends.length >= 1 }
+  ];
 }

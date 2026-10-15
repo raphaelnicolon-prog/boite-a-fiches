@@ -4,8 +4,10 @@
 
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
-  allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, last7Days
+  allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, last7Days,
+  aiLeft, FREE_AI_PER_DAY
 } from './state.js';
+import { AI_TOPICS, PARTNERS } from './demo.js';
 
 export function render() {
   const app = document.getElementById('app');
@@ -15,6 +17,7 @@ export function render() {
   else if (state.view === 'cards') app.innerHTML = renderCards();
   else if (state.view === 'trash') app.innerHTML = renderTrash();
   else if (state.view === 'settings') app.innerHTML = renderSettings();
+  else if (state.view === 'ai') app.innerHTML = renderAi();
   else if (state.view === 'session') app.innerHTML = renderSession();
   if (state.showAddRubrique) app.insertAdjacentHTML('beforeend', renderRubriqueModal(null));
   if (state.showEditRubrique) app.insertAdjacentHTML('beforeend', renderRubriqueModal(state.editingRubriqueId));
@@ -23,6 +26,7 @@ export function render() {
   if (state.showAddCard) app.insertAdjacentHTML('beforeend', renderCardModal(null));
   if (state.showEditCard) app.insertAdjacentHTML('beforeend', renderCardModal(state.editingCardId));
   if (state.showBulk) app.insertAdjacentHTML('beforeend', renderBulkModal());
+  if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   // Toujours en dernier : la confirmation doit passer au-dessus de toute autre fenêtre.
   if (state.confirmDialog) app.insertAdjacentHTML('beforeend', renderConfirmDialog());
 }
@@ -65,11 +69,17 @@ function renderSettings() {
   html += '<div class="eyebrow" style="margin:0 0 8px;">Objectif quotidien</div><div class="card"><div class="rub-meta" style="margin:0 0 12px;">Nombre de cartes visé chaque jour : c\'est la barre de progression de l\'accueil.</div><div class="row">'
     + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" onclick="App.setGoal(' + n + ')">' + n + '</button>'; }).join('')
     + '</div></div>';
+  html += '<div class="eyebrow" style="margin:0 0 8px;">Abonnement</div><div class="settings-group">'
+    + settingsRow('💎', 'Premium', state.meta.premium ? 'Actif (démo) · générations IA illimitées' : FREE_AI_PER_DAY + ' générations IA gratuites par jour · en savoir plus', 'App.openPaywall()')
+    + '</div>';
   html += '<div class="eyebrow" style="margin:0 0 8px;">Mes données</div><div class="settings-group">'
     + settingsRow('💾', 'Exporter mes fiches', 'Crée un fichier de sauvegarde', 'App.exportData()')
     + settingsRow('📥', 'Importer une sauvegarde', 'Remplace tes données par celles d\'un fichier', 'document.getElementById(\'import-file\').click()')
     + settingsRow('🗑️', 'Supprimé récemment', state.trash.length ? state.trash.length + ' élément(s) récupérable(s) pendant ' + TRASH_DAYS + ' jours' : 'Rien pour l\'instant', 'App.openTrash()')
     + '</div><input type="file" id="import-file" accept=".json,application/json" style="display:none;" onchange="App.importFile(this)"/>';
+  html += '<div class="eyebrow" style="margin:0 0 8px;">Démonstration</div><div class="settings-group">'
+    + settingsRow('🎬', 'Charger les données de démo', 'Remplace tes fiches par un jeu d\'exemple complet', 'App.loadDemo()')
+    + '</div>';
   return html;
 }
 
@@ -154,6 +164,7 @@ function renderRubrique() {
   const decks = decksOf(r.id);
   let html = '<button class="backbtn" onclick="App.backHome()">‹ Rubriques</button>';
   html += '<div class="eyebrow" style="color:' + colorVar(r.color) + ';">' + esc(r.name) + '</div><h1 class="title">' + deckPickerTitle(r) + '</h1>';
+  html += aiButton(r);
   if (decks.length === 0) { html += '<div class="subtitle">Aucun paquet ici pour l\'instant — crée le premier.</div>'; }
   decks.forEach(function (d) {
     const due = dueCards(d.id).length;
@@ -168,6 +179,7 @@ function renderRubrique() {
       + '<span class="chev">›</span>'
       + '</div></div></div>';
   });
+  html += partnerCard(r);
   html += '<div class="fab" style="background:' + colorVar(r.color) + ';" onclick="App.openAddDeck()">+</div>';
   return html;
 }
@@ -290,12 +302,13 @@ function renderTexte() {
   const s = state.session;
   const card = s.queue[s.index];
   return '<div class="center">' + sessionHeader()
-    + '<div class="qtext">' + esc(card.front) + '</div>'
+    + '<div class="qtext">' + esc(card.cloze ? card.cloze.text : card.front) + '</div>'
+    + (card.cloze ? '<div class="hint" style="margin:-8px 0 4px;">Indice : ' + esc(card.back) + '</div>' : '')
     + speakButton(card)
     + (!s.texteRevealed
       ? '<input class="answer-input" id="texte-input" placeholder="Ta réponse" value="' + esc(s.texteInput || '') + '" oninput="App.setTexteInput(this.value)" autocomplete="off" autocapitalize="off" spellcheck="false"/>'
         + '<button class="btn" style="margin-top:14px;" onclick="App.checkTexte()">Vérifier</button>'
-      : '<div class="result-banner ' + (s.texteCorrect ? 'ok' : 'ko') + '">' + (s.texteCorrect ? 'Correct !' : 'Réponse attendue : ' + esc(card.back)) + '</div>'
+      : '<div class="result-banner ' + (s.texteCorrect ? 'ok' : 'ko') + '">' + (s.texteCorrect ? 'Correct !' : 'Réponse attendue : ' + esc(card.cloze ? card.cloze.answer : card.back)) + '</div>'
         + '<div class="rate-row"><button class="pill rate-again" onclick="App.advance(false)">À revoir</button><button class="pill rate-easy" onclick="App.advance(true)">Je savais</button></div>')
     + quitLink() + '</div>';
 }
@@ -433,4 +446,79 @@ function renderTrash() {
       + '<button class="btn ghost" onclick="App.restoreDefaults()">Rétablir</button></div>';
   }
   return html;
+}
+
+// ---------- ASSISTANT IA (simulé) ----------
+function aiQuotaText() {
+  if (state.meta.premium) return '💎 Premium : générations illimitées';
+  const n = aiLeft();
+  return n > 0 ? n + ' génération' + (n > 1 ? 's' : '') + ' gratuite' + (n > 1 ? 's' : '') + ' restante' + (n > 1 ? 's' : '') + ' aujourd\'hui' : 'Plus de génération gratuite aujourd\'hui';
+}
+
+function aiButton(r) {
+  return '<button class="ai-btn" onclick="App.openAi(\'' + r.id + '\')"><span class="ai-spark">✨</span><span class="ai-txt"><span class="mode-title">Créer un paquet avec l\'IA</span>'
+    + '<span class="mode-desc">' + aiQuotaText() + '</span></span><span class="chev" style="color:#fff;">›</span></button>';
+}
+
+function partnerCard(r) {
+  const p = PARTNERS[r.id] || PARTNERS._default;
+  return '<div class="eyebrow" style="margin:22px 0 8px;">Pour aller plus loin</div>'
+    + '<a class="partner-card" href="' + esc(p.url) + '" target="_blank" rel="noopener sponsored">'
+    + '<span class="settings-ic">🎓</span><span class="settings-txt"><span class="mode-title">' + esc(p.title) + '</span>'
+    + '<span class="mode-desc">' + esc(p.desc) + ' · lien partenaire (démo)</span></span><span class="chev">›</span></a>';
+}
+
+function renderAi() {
+  const a = state.ai;
+  const r = state.rubriques.find(x => x.id === a.rubriqueId);
+  let html = '<button class="backbtn" onclick="App.leaveAi()">‹ ' + esc(r ? r.name : 'Retour') + '</button>';
+  html += '<div class="eyebrow">Assistant IA</div>';
+
+  if (a.phase === 'loading') {
+    return html + '<h1 class="title">Un instant…</h1><div class="center" style="padding-top:40px;"><div class="spinner"></div>'
+      + '<div class="subtitle" style="margin-top:20px;">L\'IA rédige tes cartes, tes phrases à trous et tes QCM…</div></div>';
+  }
+
+  if (a.phase === 'review') {
+    const res = a.result;
+    const nb = a.selected.length;
+    html += '<h1 class="title">' + esc(res.title) + '</h1><div class="subtitle">' + res.cards.length + ' cartes proposées. Décoche celles que tu ne veux pas, puis ajoute-les.</div>';
+    res.cards.forEach(function (c, i) {
+      const on = a.selected.includes(i);
+      html += '<div class="ai-item' + (on ? ' on' : '') + '" onclick="App.toggleAi(' + i + ')"><span class="ai-check">' + (on ? '✓' : '') + '</span><div style="min-width:0;">'
+        + '<div class="rub-name">' + esc(c.front) + ' <span style="color:var(--ink-soft);font-weight:500;">→ ' + esc(c.back) + '</span></div>'
+        + '<div class="rub-meta" style="font-style:italic;">' + esc(c.cloze.text) + '</div></div></div>';
+    });
+    html += '<div class="row" style="margin-top:16px;"><button class="btn" onclick="App.addAi()"' + (nb ? '' : ' disabled style="opacity:.4;"') + '>Ajouter ' + nb + ' carte(s) en nouveau paquet</button></div>';
+    return html;
+  }
+
+  html += '<h1 class="title">Décris ce que tu veux réviser</h1>';
+  html += '<div class="subtitle">L\'IA crée un paquet complet : cartes, QCM et phrases à trous en contexte.</div>';
+  html += '<input class="answer-input" style="max-width:none;text-align:left;" id="ai-prompt" placeholder="ex : Vocabulaire du football en anglais" value="' + esc(a.prompt) + '" autocomplete="off"/>';
+  if (a.error) html += '<div class="result-banner ko" style="font-weight:600;">' + esc(a.error) + '</div>';
+  html += '<div class="eyebrow" style="margin:18px 0 8px;">Idées</div><div class="chip-row">'
+    + AI_TOPICS.map(function (t, i) { return '<button class="chip wide" onclick="App.pickAiTopic(' + i + ')">' + t.label + '</button>'; }).join('') + '</div>';
+  html += '<div class="rub-meta" style="margin-top:18px;">' + aiQuotaText() + (state.meta.premium ? '' : ' · <a href="#" onclick="App.openPaywall();return false;" style="color:var(--primary);">Passer Premium</a>') + '</div>';
+  html += '<div class="row" style="margin-top:14px;"><button class="btn" onclick="App.generateAi()">✨ Générer</button></div>';
+  html += '<div class="rub-meta" style="margin-top:16px;">Prototype : l\'IA est simulée sur quelques thèmes. La version finale appellerait un vrai modèle depuis un serveur sécurisé.</div>';
+  return html;
+}
+
+function renderPaywall() {
+  const prem = state.meta.premium;
+  const row = (label, free, pro) => '<tr><td>' + label + '</td><td>' + free + '</td><td class="pro">' + pro + '</td></tr>';
+  return '<div class="modal-backdrop" onclick="if(event.target===this) App.closePaywall()"><div class="modal">'
+    + '<div class="eyebrow">💎 Boîte à Fiches Premium</div>'
+    + '<div class="confirm-body">' + (prem ? 'Premium est actif sur cet appareil (démo).' : 'Avec Premium, plus aucune limite de générations IA. Gratuit : ' + FREE_AI_PER_DAY + ' par jour.') + '</div>'
+    + '<table class="plan-table"><tr><th></th><th>Gratuit</th><th class="pro">Premium</th></tr>'
+    + row('Cartes et révisions', 'illimitées', 'illimitées')
+    + row('Générations IA', FREE_AI_PER_DAY + ' / jour', 'illimitées')
+    + row('Duels et ligue', '✓', '✓')
+    + row('Import de cours (PDF, photos)', '—', 'bientôt')
+    + '</table>'
+    + '<div class="rub-meta" style="margin-top:10px;">Exemple de tarif : 4,99 € / mois. Aucun paiement réel dans cette démo.</div>'
+    + '<div class="modal-actions"><button class="btn ghost" onclick="App.closePaywall()">Fermer</button>'
+    + '<button class="btn" onclick="App.' + (prem ? 'downgradePremium' : 'upgradePremium') + '()">' + (prem ? 'Revenir au gratuit' : 'Essayer Premium') + '</button></div>'
+    + '</div></div>';
 }

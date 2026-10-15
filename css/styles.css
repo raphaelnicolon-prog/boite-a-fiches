@@ -146,6 +146,24 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .chip { min-width: 52px; padding: 9px 0; border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 14px; font-weight: 700; border: 1.5px solid transparent; }
 .chip.sel { border-color: var(--primary); color: var(--primary); }
 .chip:active { opacity: .6; }
+/* ---- assistant IA, partenaires, Premium ---- */
+.ai-btn { display: flex; align-items: center; gap: 14px; width: 100%; margin: 4px 0 16px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(135deg, var(--medley2), var(--medley1)); color: #fff; text-align: left; }
+.ai-btn .mode-desc { color: rgba(255, 255, 255, 0.88); }
+.ai-spark { font-size: 22px; }
+.ai-txt { flex: 1; display: flex; flex-direction: column; }
+.spinner { width: 44px; height: 44px; border-radius: 50%; border: 4px solid var(--border); border-top-color: var(--primary); animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ai-item { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; opacity: .5; }
+.ai-item.on { opacity: 1; }
+.ai-check { width: 22px; height: 22px; flex-shrink: 0; border-radius: 7px; border: 2px solid var(--ink-soft); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #06222a; }
+.ai-item.on .ai-check { background: var(--primary); border-color: var(--primary); }
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip.wide { min-width: 0; padding: 10px 14px; background: var(--card); text-align: left; }
+.partner-card { display: flex; align-items: center; gap: 14px; background: var(--card); border-radius: 16px; padding: 14px 16px; color: var(--ink); text-decoration: none; }
+.plan-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+.plan-table th, .plan-table td { padding: 8px 4px; text-align: center; border-bottom: 1px solid var(--border); }
+.plan-table th:first-child, .plan-table td:first-child { text-align: left; }
+.plan-table .pro { color: var(--primary); font-weight: 700; }
 .manage-link { display: block; width: 100%; background: none; color: var(--ink-soft); font-size: 13px; font-weight: 600; text-decoration: underline; padding: 14px 0 4px; text-align: center; }
 .manage-link:active { opacity: .55; }
 
@@ -187,12 +205,12 @@ button { font-family: inherit; cursor: pointer; border: none; }
    avec un léger rebond (l'effet "spring" d'iOS). Le rebond vient de la
    courbe cubic-bezier ci-dessous, qui dépasse légèrement 100% avant de
    se stabiliser. */
-.btn, .pill, .fab, .icon-btn,
+.btn, .pill, .fab, .icon-btn, .ai-btn,
 .card, .mode-card, .deck-card, .rub-item,
 .opt, .scope-opt, .swatch, .match-item {
   transition: transform .18s cubic-bezier(.34, 1.56, .64, 1), filter .18s ease, box-shadow .18s ease;
 }
-.btn:active, .pill:active, .fab:active, .icon-btn:active,
+.btn:active, .pill:active, .fab:active, .icon-btn:active, .ai-btn:active,
 .card:active, .mode-card:active, .deck-card:active,
 .opt:active:not(.correct):not(.wrong), .scope-opt:active, .swatch:active, .match-item:active:not(.matched) {
   transform: scale(0.96);
