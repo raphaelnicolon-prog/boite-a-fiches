@@ -256,6 +256,16 @@ function renderRubrique() {
 }
 
 // ---------- MODES ----------
+// Toutes les façons d'ajouter des cartes, regroupées (écran du paquet + liste des cartes).
+function addCardsBlock(d) {
+  return '<div class="section-label">Ajouter des cartes</div><div class="settings-group">'
+    + settingsRow('✏️', 'Une carte', 'Recto et verso, à la main', 'App.openAddCard()')
+    + settingsRow('📋', 'Plusieurs cartes', 'Colle une liste ou importe un fichier .csv / .txt', 'App.openBulk()')
+    + settingsRow('✨', 'Générer avec l\'IA', aiQuotaText() + ' · crée un nouveau paquet', 'App.openAi(\'' + d.rubriqueId + '\')')
+    + settingsRow('📝', 'Coller un cours', 'Les définitions deviennent des cartes', 'App.openAi(\'' + d.rubriqueId + '\',\'text\')')
+    + '</div>';
+}
+
 function renderModes() {
   const d = state.decks.find(x => x.id === state.currentDeckId);
   if (!d) return renderHome();
@@ -274,7 +284,7 @@ function renderModes() {
   const enoughMedley = total >= 2;
   html += '<div class="mode-card medley" style="opacity:' + (enoughMedley ? 1 : .45) + ';" onclick="' + (enoughMedley ? ('App.openMedleyScope(\'' + d.id + '\')') : '') + '">'
     + '<div><div class="mode-title">✨ Quizz Medley</div><div class="mode-desc">Mélange de tous les modes disponibles</div></div><span class="chev">›</span></div>';
-  html += '<button class="add-row" onclick="App.openAddCard()">+ Ajouter une carte</button>';
+  html += addCardsBlock(d);
   html += '<button class="manage-link" onclick="App.openCards(\'' + d.id + '\')">Voir et modifier les cartes (' + total + ')</button>';
   return html;
 }
@@ -286,11 +296,10 @@ function renderCards() {
   const cards = cardsOf(d.id);
   let html = '<button class="backbtn" onclick="App.openDeck(\'' + d.id + '\')">‹ ' + esc(d.name) + '</button>';
   html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Tes cartes</h1>';
-  html += '<div class="row between" style="margin-bottom:10px;"><div class="subtitle" style="margin:0;">' + pl(cards.length, 'carte') + '</div>'
-    + '<button class="toggle-reorder" onclick="App.openBulk()">Ajouter plusieurs cartes</button></div>';
-  if (cards.length) html += '<div style="margin-bottom:16px;"><button class="link" onclick="App.shareDeck()">📤 Partager ce paquet avec un camarade</button></div>';
-  html += '<button class="add-row" style="margin-top:0;" onclick="App.openAddCard()">+ Ajouter une carte</button>';
-  if (cards.length === 0) html += '<div class="subtitle">Aucune carte pour l\'instant : ajoutes-en une, ou colles-en plusieurs d\'un coup.</div>';
+  html += '<div class="subtitle">' + pl(cards.length, 'carte') + '</div>';
+  html += addCardsBlock(d);
+  if (cards.length) html += '<div style="margin:4px 0 16px;"><button class="link" onclick="App.shareDeck()">📤 Partager ce paquet avec un camarade</button></div>';
+  if (cards.length) html += '<div class="section-label">Les cartes du paquet</div>';
   cards.forEach(function (c) {
     html += '<div class="list-item"><div class="row between" style="align-items:flex-start;">'
       + '<div style="min-width:0;"><div class="rub-name">' + esc(c.front) + '</div><div class="rub-meta">' + esc(c.back) + '</div></div>'
