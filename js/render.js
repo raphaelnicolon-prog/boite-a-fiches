@@ -6,7 +6,7 @@ import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
   allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, last7Days,
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
-  weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak
+  weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak, APP_VERSION
 } from './state.js';
 import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE, ARTICLES } from './demo.js';
 import { todayStr } from './state.js';
@@ -38,6 +38,7 @@ export function render() {
   if (state.showBulk) app.insertAdjacentHTML('beforeend', renderBulkModal());
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
+  if (state.showFeedback) app.insertAdjacentHTML('beforeend', renderFeedbackModal());
   if (!state.meta.welcomed && state.view === 'home') app.insertAdjacentHTML('beforeend', renderWelcome());
   if (state.updateReady) app.insertAdjacentHTML('beforeend', '<div class="update-bar" onclick="location.reload()">✨ Nouvelle version disponible · toucher pour recharger</div>');
   // Toujours en dernier : la confirmation doit passer au-dessus de toute autre fenêtre.
@@ -97,12 +98,17 @@ function renderSettings() {
     + settingsRow('📥', 'Importer une sauvegarde', 'Remplace tes données par celles d\'un fichier', 'document.getElementById(\'import-file\').click()')
     + settingsRow('🗑️', 'Supprimé récemment', state.trash.length ? state.trash.length + ' élément(s) récupérable(s) pendant ' + TRASH_DAYS + ' jours' : 'Rien pour l\'instant', 'App.openTrash()')
     + '</div><input type="file" id="import-file" accept=".json,application/json" style="display:none;" onchange="App.importFile(this)"/>';
+  html += '<div class="eyebrow" style="margin:0 0 8px;">Partager et améliorer</div><div class="settings-group">'
+    + settingsRow('📨', 'Inviter un camarade', 'Envoie le lien de l\'appli', 'App.shareApp()')
+    + settingsRow('💬', 'Donner mon avis', 'Note et commentaire, pour améliorer l\'appli', 'App.openFeedback()')
+    + '</div>';
   html += '<div class="eyebrow" style="margin:0 0 8px;">Projet</div><div class="settings-group">'
     + settingsRow('📊', 'Présentation du projet', 'Modèle économique, rétention et feuille de route', 'App.openPitch()')
     + '</div>';
   html += '<div class="eyebrow" style="margin:0 0 8px;">Démonstration</div><div class="settings-group">'
     + settingsRow('🎬', 'Charger les données de démo', 'Remplace tes fiches par un jeu d\'exemple complet', 'App.loadDemo()')
     + '</div>';
+  html += '<div class="rub-meta" style="margin-top:6px;text-align:center;">Boîte à Fiches · version ' + APP_VERSION + ' (prototype)</div>';
   return html;
 }
 
@@ -721,6 +727,7 @@ function renderFriends() {
   html += '<div class="eyebrow">Multijoueur</div><h1 class="title">Mes amis</h1>';
   html += '<input class="answer-input" style="max-width:none;text-align:left;margin-bottom:12px;" id="friend-search" placeholder="Rechercher un pseudo (ex : Martin)" oninput="App.searchFriends(this.value)" autocomplete="off" autocapitalize="off" value="' + esc(state.friendQuery || '') + '"/>';
   html += '<div id="friend-results">' + friendResultsHtml(state.friendQuery) + '</div>';
+  html += '<div class="row" style="margin-top:16px;"><button class="btn ghost" onclick="App.shareApp()">📨 Inviter un camarade</button></div>';
   html += '<div class="rub-meta" style="margin-top:14px;">Prototype : annuaire fictif, les demandes sont acceptées automatiquement.</div>';
   return html;
 }
@@ -914,5 +921,18 @@ function renderWelcome() {
     + '<label>Objectif quotidien (cartes par jour)</label><div class="row">'
     + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" id="wg-' + n + '" onclick="App.pickWelcomeGoal(' + n + ')">' + n + '</button>'; }).join('')
     + '</div><div class="modal-actions"><button class="btn ghost" onclick="App.skipWelcome()">Plus tard</button><button class="btn" onclick="App.finishWelcome()">C\'est parti</button></div>'
+    + '</div></div>';
+}
+
+// ---------- AVIS ----------
+function renderFeedbackModal() {
+  const faces = ['😞', '😐', '🙂', '😍'];
+  return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeFeedback()"><div class="modal">'
+    + '<div class="eyebrow">Donner mon avis</div>'
+    + '<div class="rub-meta" style="margin-top:8px;">Ton retour aide à améliorer l\'appli. Il sera préparé dans ton menu de partage : tu choisis où l\'envoyer.</div>'
+    + '<label>Ton ressenti</label><div class="row">'
+    + faces.map(function (f, i) { return '<button class="chip' + (state.feedbackRating === i + 1 ? ' sel' : '') + '" id="fb-' + (i + 1) + '" onclick="App.pickFeedback(' + (i + 1) + ')" style="font-size:20px;">' + f + '</button>'; }).join('')
+    + '</div><label>Un commentaire (facultatif)</label><textarea id="fb-text" placeholder="Ce que j\'aime, ce qui manque, ce qui bug…"></textarea>'
+    + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeFeedback()">Annuler</button><button class="btn" onclick="App.sendFeedback()">Envoyer</button></div>'
     + '</div></div>';
 }

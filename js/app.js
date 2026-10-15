@@ -3,7 +3,7 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
@@ -427,6 +427,48 @@ window.App = {
     persist(); refresh();
   },
   skipWelcome() { state.meta.welcomed = true; persist(); refresh(); },
+
+  // ---- Partage et avis ----
+  async shareApp() {
+    const url = location.origin + location.pathname.replace(/index\.html$/, '');
+    const data = { title: 'Boîte à Fiches', text: 'Je révise avec Boîte à Fiches : cartes, QCM, duels et ligue. Essaie-la !', url };
+    try {
+      if (navigator.share) { await navigator.share(data); return; }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      askConfirm({ title: 'Lien copié', body: url, label: '' });
+    } catch (e) {
+      askConfirm({ title: 'Voici le lien à partager', body: url, label: '' });
+    }
+  },
+  openFeedback() { state.feedbackRating = 0; state.showFeedback = true; refresh(); },
+  closeFeedback() { state.showFeedback = false; refresh(); },
+  // Pas de refresh() : il effacerait le commentaire en cours de saisie.
+  pickFeedback(n) {
+    state.feedbackRating = n;
+    [1, 2, 3, 4].forEach(i => { const el = document.getElementById('fb-' + i); if (el) el.classList.toggle('sel', i === n); });
+  },
+  async sendFeedback() {
+    const t = document.getElementById('fb-text');
+    const comment = t ? t.value.trim() : '';
+    if (!state.feedbackRating && !comment) { askConfirm({ title: 'Rien à envoyer', body: 'Choisis une humeur ou écris un commentaire.', label: '' }); return; }
+    const text = 'Avis Boîte à Fiches (v' + APP_VERSION + ')\nRessenti : ' + (state.feedbackRating ? state.feedbackRating + '/4' : 'non précisé') + '\n' + (comment || '(pas de commentaire)');
+    state.showFeedback = false;
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Avis Boîte à Fiches', text }); refresh(); return; }
+    } catch (e) {
+      if (e && e.name === 'AbortError') { refresh(); return; }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      askConfirm({ title: 'Avis copié', body: 'Colle-le dans un message pour l\'envoyer.', label: '' });
+    } catch (e) {
+      askConfirm({ title: 'Ton avis', body: text, label: '' });
+    }
+  },
 
   // ---- Profil ----
   openProfile() { state.showProfile = true; refresh(); },

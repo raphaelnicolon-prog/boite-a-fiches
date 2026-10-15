@@ -1,6 +1,9 @@
 // Données de l'application + petites fonctions utilitaires qui ne touchent pas au DOM.
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
+// Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
+export const APP_VERSION = '22';
+
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
 export const CALM_COLORS = {
@@ -54,6 +57,8 @@ export const state = {
   meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
   profile: { pseudo: 'Toi', avatar: '🙂' }, // pseudo et avatar affichés dans les duels et le classement
   showProfile: false,
+  showFeedback: false,
+  feedbackRating: 0,
   openArticle: null,       // article ouvert dans « Découvrir »
   updateReady: false,      // une nouvelle version de l'appli est prête (voir app.js)
   multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 }, // points de ligue du joueur
