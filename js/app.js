@@ -889,6 +889,9 @@ window.addEventListener('offline', syncOfflinePill);
 
 // ---- Démarrage de l'appli ----
 loadData();
+// Demande au navigateur de ne pas effacer nos données quand il manque de place
+// (pas garanti partout, mais ça réduit le risque).
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* pas grave */ }
 ensureWeek();
 setRefresh(refresh);
 refresh();
