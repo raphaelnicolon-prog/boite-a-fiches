@@ -10,9 +10,9 @@
 //   - match  : course d'appariement, 3 manches de 4 paires à relier
 //   - medley : enchaîne QCM, vrai/faux, phrase à trous et appariement
 
-import { state, shuffle, ensureWeek } from './state.js';
+import { state, shuffle, ensureWeek, todayStr } from './state.js';
 import { persist } from './storage.js';
-import { DEMO_PEOPLE, LEAGUE_BOTS } from './demo.js';
+import { DEMO_PEOPLE, LEAGUE_BOTS, PROMO_BOTS } from './demo.js';
 
 export const POINTS = { win: 50, draw: 25, loss: 15 };
 
@@ -70,7 +70,7 @@ export function startDuel(opts) {
     const online = DEMO_PEOPLE.filter(p => p.online);
     opponent = online[Math.floor(Math.random() * online.length)];
   }
-  state.duel = { phase: kind === 'rematch' ? 'found' : 'search', kind, mode, opponent, deckId: deck.id, deckName: deck.name };
+  state.duel = { phase: kind === 'rematch' ? 'found' : 'search', kind, mode, opponent, deckId: deck.id, deckName: deck.name, daily: !!(opts && opts.daily) };
   refreshFn();
   const wait = kind === 'rematch' ? 0 : (kind === 'friend' ? 1400 : 2400);
   stepTimers.push(setTimeout(function () {
@@ -287,21 +287,33 @@ function endMatch() {
   if (!d) return;
   ensureWeek();
   const outcome = d.me.score > d.opp.score ? 'win' : d.me.score < d.opp.score ? 'loss' : 'draw';
-  const gained = POINTS[outcome];
+  let gained = POINTS[outcome];
+  // Défi du jour : bonus de 20 points, une seule fois par jour.
+  let dailyBonus = 0;
+  if (d.daily && state.meta.dailyDone !== todayStr()) { dailyBonus = 20; state.meta.dailyDone = todayStr(); gained += dailyBonus; }
   state.multi.weekPoints += gained;
   state.multi.total += gained;
   state.multi.played++;
   if (outcome === 'win') state.multi.wins++;
   persist();
   d.phase = 'end';
-  d.result = { outcome, gained, rank: leagueTable().findIndex(r => r.me) + 1 };
+  d.result = { outcome, gained, dailyBonus, rank: leagueTable('general').findIndex(r => r.me) + 1 };
   refreshFn();
 }
 
-// Classement de la semaine : joueurs fictifs + toi (à égalité, tu passes devant).
-export function leagueTable() {
+// Classement de la semaine pour un cercle : 'general' (joueurs fictifs), 'amis' (tes amis)
+// ou 'promo' (une promo fictive). Toi : à égalité, tu passes devant.
+export function leagueTable(scope) {
   ensureWeek();
-  const rows = LEAGUE_BOTS.map(b => ({ name: b.name, points: b.points, me: false }));
+  let base;
+  if (scope === 'promo') base = PROMO_BOTS;
+  else if (scope === 'amis') {
+    base = state.social.friends.map(function (name) {
+      const known = LEAGUE_BOTS.find(b => b.name === name);
+      return { name, points: known ? known.points : 30 };
+    });
+  } else base = LEAGUE_BOTS;
+  const rows = base.map(b => ({ name: b.name, points: b.points, me: false }));
   rows.push({ name: state.profile.pseudo, points: state.multi.weekPoints, me: true });
   rows.sort((a, b) => b.points - a.points || (a.me ? -1 : b.me ? 1 : 0));
   return rows;

@@ -4,7 +4,7 @@
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek } from './state.js';
-import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE } from './demo.js';
+import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render, friendResultsHtml } from './render.js';
@@ -95,6 +95,12 @@ window.App = {
   quickMatch() { state.view = 'duel'; startDuel(null); },
   duelAnswer(i) { duelAnswerFn(i); },
   duelPickMatch(side, i) { pickMatch(side, i); },
+  setLeagueScope(s) { state.leagueScope = s; refresh(); },
+  // Défi du jour : un Medley contre « les joueurs du jour » ; le bonus n'est accordé qu'une fois par jour.
+  dailyChallenge() {
+    state.view = 'duel';
+    startDuel({ opponent: DAILY_OPPONENT, mode: 'medley', skipSearch: true, daily: true });
+  },
   duelRematch() {
     const d = state.duel;
     if (!d) return;

@@ -9,6 +9,7 @@ import {
   weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak
 } from './state.js';
 import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE, ARTICLES } from './demo.js';
+import { todayStr } from './state.js';
 import { leagueTable, POINTS, DUEL_MODES } from './duel.js';
 
 export function render() {
@@ -146,6 +147,10 @@ function renderHome() {
 
   html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;" onclick="App.openMulti()">'
     + '<div><div class="mode-title">⚔️ Multijoueur</div><div class="mode-desc">Défie tes amis, grimpe dans la ligue</div></div><span class="chev">›</span></button>';
+
+  const dailyDone = state.meta.dailyDone === todayStr();
+  html += '<div class="mode-card" style="cursor:pointer;" onclick="App.dailyChallenge()"><div><div class="mode-title">🎯 Défi du jour' + (dailyDone ? ' ✓' : '') + '</div>'
+    + '<div class="mode-desc">' + (dailyDone ? 'Relevé aujourd\'hui · reviens demain pour un nouveau bonus' : 'Un Medley contre les joueurs du jour · +20 points bonus') + '</div></div><span class="chev">›</span></div>';
 
   html += '<div class="row between" style="margin:18px 0 8px;"><div class="eyebrow">Mes rubriques</div>'
     + '<button class="toggle-reorder" onclick="App.toggleReorder()">' + (state.reorderMode ? 'Terminé' : 'Réorganiser') + '</button></div>';
@@ -620,7 +625,7 @@ function renderDuel() {
       + '<button class="link" onclick="App.openMulti()">Annuler</button></div>';
   }
   if (d.phase === 'found') {
-    return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.kind === 'friend' ? opp.name + ' a accepté' : 'Adversaire trouvé') + '</div>'
+    return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.daily ? 'Défi du jour' : d.kind === 'friend' ? opp.name + ' a accepté' : 'Adversaire trouvé') + '</div>'
       + avatar(opp.name, true) + '<h1 class="title" style="margin-top:14px;">' + esc(opp.name) + '</h1>'
       + '<div class="subtitle">Niveau ' + opp.level + ' · en ligne · ' + esc((DUEL_MODES.find(x => x.id === d.mode) || DUEL_MODES[0]).label) + ' · thème : ' + esc(d.deckName) + '</div><div class="spinner"></div>'
       + '<div class="hint">Le duel commence…</div></div>';
@@ -631,7 +636,7 @@ function renderDuel() {
     return '<div class="center" style="padding-top:30px;"><div class="eyebrow">Résultat</div><h1 class="title">' + title + '</h1>'
       + '<div class="duel-final"><div><div class="duel-name">' + esc(state.profile.pseudo) + '</div><div class="duel-score">' + d.me.score + '</div></div>'
       + '<div class="duel-vs">vs</div><div><div class="duel-name">' + esc(opp.name) + '</div><div class="duel-score">' + d.opp.score + '</div></div></div>'
-      + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue</div>'
+      + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue' + (r.dailyBonus ? ' (dont ' + r.dailyBonus + ' de bonus du défi 🎯)' : '') + '</div>'
       + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement cette semaine' + (r.rank <= 5 ? ' · dans la zone des lots 🎁' : '') + '</div></div>'
       + '<div class="row" style="margin-top:18px;"><button class="btn" onclick="App.duelRematch()">Revanche</button>'
       + '<button class="btn ghost" onclick="App.openLeague()">Classement</button></div>'
@@ -664,17 +669,21 @@ function renderDuel() {
 }
 
 function renderLeague() {
-  const rows = leagueTable();
+  const scope = state.leagueScope || 'general';
+  const rows = leagueTable(scope);
   let html = '<button class="backbtn" onclick="App.openMulti()">‹ Multijoueur</button>';
   html += '<div class="eyebrow">Ligue de la semaine</div><h1 class="title">Classement</h1>';
   html += '<div class="subtitle">Se termine dans ' + daysLeftInWeek() + ' jour(s). Victoire : +' + POINTS.win + ' pts, égalité : +' + POINTS.draw + ', défaite : +' + POINTS.loss + '.</div>';
-  html += '<div class="prize-card"><span class="settings-ic">🎁</span><div><div class="mode-title">Lot du mois · partenaire</div>'
+  html += '<div class="chip-row" style="margin-bottom:12px;">' + [['general', '🌍 Général'], ['promo', '🎓 Promo'], ['amis', '👥 Amis']].map(function (x) {
+    return '<button class="chip wide' + (scope === x[0] ? ' sel' : '') + '" onclick="App.setLeagueScope(\'' + x[0] + '\')">' + x[1] + '</button>'; }).join('') + '</div>';
+  if (scope !== 'amis') html += '<div class="prize-card"><span class="settings-ic">🎁</span><div><div class="mode-title">Lot du mois · partenaire</div>'
     + '<div class="mode-desc">Les 5 premiers participent au tirage au sort : 2 places de concert (exemple de lot).</div></div></div>';
+  if (scope === 'amis' && state.social.friends.length === 0) html += '<div class="rub-meta" style="margin-bottom:10px;">Ajoute des amis pour comparer vos points chaque semaine.</div>';
   html += '<div class="settings-group">';
   rows.forEach(function (r, i) {
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
-    html += '<div class="league-row' + (r.me ? ' me' : '') + (i === 5 ? ' cut' : '') + '"><span class="rank">' + medal + '</span>'
-      + '<span class="league-name">' + esc(r.name) + (i < 5 ? ' <span title="Zone des lots">🎁</span>' : '') + '</span><span class="league-pts">' + r.points + ' pts</span></div>';
+    html += '<div class="league-row' + (r.me ? ' me' : '') + (scope !== 'amis' && i === 5 ? ' cut' : '') + '"><span class="rank">' + medal + '</span>'
+      + '<span class="league-name">' + esc(r.name) + (scope !== 'amis' && i < 5 ? ' <span title="Zone des lots">🎁</span>' : '') + '</span><span class="league-pts">' + r.points + ' pts</span></div>';
   });
   html += '</div><div class="rub-meta">Classement de démonstration : les autres joueurs sont fictifs.</div>';
   return html;

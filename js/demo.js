@@ -319,3 +319,13 @@ export function generateFromText(text, title) {
   if (cards.length === 0) return null;
   return { title: (title || '').trim() || 'Mon cours (analyse)', speakLang: '', cards };
 }
+
+// Classement fictif d'une promo d'école (cercle « Promo ») pour la démonstration.
+export const PROMO_BOTS = [
+  { name: 'Chloé B.', points: 140 }, { name: 'Maxime D.', points: 118 }, { name: 'Salomé R.', points: 104 },
+  { name: 'Antoine L.', points: 92 }, { name: 'Manon T.', points: 81 }, { name: 'Julien P.', points: 66 },
+  { name: 'Clara V.', points: 52 }, { name: 'Hugo F.', points: 41 }, { name: 'Lina K.', points: 30 }, { name: 'Paul G.', points: 18 }
+];
+
+// Adversaire du défi du jour : représente le niveau moyen des joueurs.
+export const DAILY_OPPONENT = { name: 'Joueurs du jour', level: 3, online: true };
