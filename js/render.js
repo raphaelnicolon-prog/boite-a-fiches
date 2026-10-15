@@ -37,6 +37,8 @@ export function render() {
   if (state.showBulk) app.insertAdjacentHTML('beforeend', renderBulkModal());
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
+  if (!state.meta.welcomed && state.view === 'home') app.insertAdjacentHTML('beforeend', renderWelcome());
+  if (state.updateReady) app.insertAdjacentHTML('beforeend', '<div class="update-bar" onclick="location.reload()">✨ Nouvelle version disponible · toucher pour recharger</div>');
   // Toujours en dernier : la confirmation doit passer au-dessus de toute autre fenêtre.
   if (state.confirmDialog) app.insertAdjacentHTML('beforeend', renderConfirmDialog());
 }
@@ -370,7 +372,8 @@ function renderSessionDone() {
   return '<div class="center" style="padding-top:30px;">'
     + '<div class="eyebrow">Session</div><h1 class="title">Bien joué !</h1>'
     + '<div class="subtitle">' + (s.reviewedCount || 0) + ' carte(s) revue(s).</div>'
-    + '<button class="btn" onclick="App.backHome()">Retour à l\'accueil</button></div>';
+    + sessionRecap()
+    + '<button class="btn" style="margin-top:18px;" onclick="App.backHome()">Retour à l\'accueil</button></div>';
 }
 
 function quitLink() {
@@ -879,4 +882,28 @@ function duelMatchHtml(d, qu, revealed) {
   };
   return '<div class="match-wrap" style="margin-top:6px;">' + col('L', m.left, 'front') + col('R', m.right, 'back') + '</div>'
     + '<div class="rub-meta" style="margin-top:10px;">' + m.count + ' / ' + qu.pairs.length + ' paires reliées</div>';
+}
+
+// Récap affiché à la fin d'une session : objectif du jour et série, pour encourager à continuer.
+function sessionRecap() {
+  const done = reviewedToday();
+  const goal = state.stats.goal;
+  const pct = Math.min(100, Math.round(done / goal * 100));
+  return '<div class="stat-card" style="width:100%;text-align:left;"><div class="mode-title">'
+    + (done >= goal ? '🎉 Objectif du jour atteint' : done + ' / ' + goal + ' cartes aujourd\'hui') + '</div>'
+    + '<div class="mode-desc">🔥 ' + currentStreak() + ' jour(s) d\'affilée</div>'
+    + '<div class="goal-bar"><div class="goal-fill' + (done >= goal ? ' full' : '') + '" style="width:' + pct + '%;"></div></div></div>';
+}
+
+// ---------- ACCUEIL DE LA PREMIÈRE OUVERTURE ----------
+function renderWelcome() {
+  const named = state.profile.pseudo !== 'Toi' ? state.profile.pseudo : '';
+  return '<div class="modal-backdrop"><div class="modal">'
+    + '<div class="eyebrow">Bienvenue 👋</div>'
+    + '<div class="confirm-body">Boîte à Fiches t\'aide à réviser par petites sessions, avec des rappels espacés. Deux petits réglages pour commencer :</div>'
+    + '<label>Ton pseudo</label><input id="welcome-pseudo" maxlength="16" placeholder="ex : Raph" value="' + esc(named) + '" autocomplete="off"/>'
+    + '<label>Objectif quotidien (cartes par jour)</label><div class="row">'
+    + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" id="wg-' + n + '" onclick="App.pickWelcomeGoal(' + n + ')">' + n + '</button>'; }).join('')
+    + '</div><div class="modal-actions"><button class="btn ghost" onclick="App.skipWelcome()">Plus tard</button><button class="btn" onclick="App.finishWelcome()">C\'est parti</button></div>'
+    + '</div></div>';
 }

@@ -237,7 +237,7 @@ window.App = {
         const d = demoDataset();
         state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
         state.stats = d.stats; state.multi = d.multi; state.social = d.social;
-        state.meta = { premium: false, aiDays: {}, aiTotal: 0, reminder: state.meta.reminder };
+        state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, reminder: state.meta.reminder };
         state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
         persist(); refresh();
       }
@@ -405,6 +405,22 @@ window.App = {
   openStats() { state.view = 'stats'; refresh(); },
   openDiscover() { state.view = 'discover'; state.openArticle = null; refresh(); },
   toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
+
+  // ---- Accueil de la première ouverture ----
+  // Pas de refresh() sur le choix de l'objectif : il effacerait le pseudo déjà tapé.
+  pickWelcomeGoal(n) {
+    if (!GOAL_CHOICES.includes(n)) return;
+    state.stats.goal = n;
+    GOAL_CHOICES.forEach(g => { const el = document.getElementById('wg-' + g); if (el) el.classList.toggle('sel', g === n); });
+  },
+  finishWelcome() {
+    const input = document.getElementById('welcome-pseudo');
+    const pseudo = input ? input.value.trim() : '';
+    if (pseudo.length >= 2 && pseudo.length <= 16) state.profile.pseudo = pseudo;
+    state.meta.welcomed = true;
+    persist(); refresh();
+  },
+  skipWelcome() { state.meta.welcomed = true; persist(); refresh(); },
 
   // ---- Profil ----
   openProfile() { state.showProfile = true; refresh(); },
@@ -703,6 +719,12 @@ setRefresh(refresh);
 refresh();
 
 if ('serviceWorker' in navigator) {
+  // Quand une nouvelle version prend le relais, on propose de recharger au lieu de
+  // couper l'utilisateur en pleine révision (ou en plein duel).
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) { state.updateReady = true; refresh(); }
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js').catch(err => {
       console.warn('Service worker non installé (normal en développement local sans HTTPS/localhost).', err);

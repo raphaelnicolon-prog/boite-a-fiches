@@ -26,9 +26,10 @@ export function sanitizeStats(raw) {
 }
 
 export function sanitizeMeta(raw) {
-  const m = { premium: false, aiDays: {}, aiTotal: 0, reminder: { on: false, time: '18:00' } };
+  const m = { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, reminder: { on: false, time: '18:00' } };
   if (!raw || typeof raw !== 'object') return m;
   m.premium = raw.premium === true;
+  m.welcomed = raw.welcomed === true;
   if (raw.reminder && typeof raw.reminder === 'object') {
     m.reminder.on = raw.reminder.on === true;
     if (typeof raw.reminder.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.reminder.time)) m.reminder.time = raw.reminder.time;
