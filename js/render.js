@@ -143,8 +143,8 @@ function renderHome() {
   const visibleRubs = state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order);
   const hiddenRubs = state.rubriques.filter(r => r.hidden);
 
-  let html = '<div class="row between" style="align-items:flex-start;"><div><div class="eyebrow">Boîte à Fiches</div><h1 class="title">Ton espace de révision</h1></div>'
-    + '<div class="row" style="gap:8px;"><button class="icon-btn" onclick="App.openSearch()" aria-label="Rechercher">' + SEARCH_ICON + '</button>'
+  let html = '<div class="row between" style="align-items:flex-start;"><div><div class="eyebrow">Boîte à Fiches</div><h1 class="title home-title">Ton espace de révision</h1></div>'
+    + '<div class="row" style="gap:6px;"><button class="icon-btn" onclick="App.openSearch()" aria-label="Rechercher">' + SEARCH_ICON + '</button>'
     + '<button class="icon-btn" onclick="App.openSettings()" aria-label="Réglages">' + GEAR_ICON + '</button></div></div>';
   html += '<div class="subtitle">' + (totalDue > 0 ? totalDue + ' carte(s) à revoir aujourd\'hui, tous paquets confondus.' : 'Rien à revoir aujourd\'hui.') + '</div>';
   html += renderStreakCard();

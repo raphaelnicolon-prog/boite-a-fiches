@@ -89,7 +89,7 @@ export const AI_TOPICS = [
     ]
   },
   {
-    label: '💼 Conseil en anglais', keywords: ['conseil', 'consulting', 'business', 'entreprise', 'management', 'pro'],
+    label: '💼 Conseil en anglais', keywords: ['conseil', 'consulting', 'business', 'affaires', 'anglais pro'],
     prompt: 'Vocabulaire du conseil et du business en anglais', title: 'Conseil (anglais)', speakLang: 'en-GB',
     cards: [
       ['stakeholder', 'partie prenante', 'We need to identify every ____ before the kick-off.', 'stakeholder'],
@@ -105,6 +105,70 @@ export const AI_TOPICS = [
       ['KPI', 'indicateur clé de performance', 'Customer churn is our key ____.', 'KPI'],
       ['kick-off meeting', 'réunion de lancement', 'The ____ is scheduled for Monday morning.', 'kick-off meeting']
     ]
+  },
+  {
+    label: '📣 Marketing', keywords: ['marketing', 'marque', 'client', 'vente', 'communication'],
+    prompt: 'Les notions clés du marketing', title: 'Marketing (notions clés)', speakLang: '',
+    cards: [
+      ['Persona', 'Profil fictif qui représente un client cible', 'Un ____ est un profil fictif qui représente un client cible.', 'persona'],
+      ['Segmentation', 'Découpage du marché en groupes de clients homogènes', 'La ____ découpe le marché en groupes de clients aux besoins similaires.', 'segmentation'],
+      ['Positionnement', 'Place occupée par une marque dans l\'esprit du client', 'Le ____ définit la place d\'une marque dans l\'esprit du client.', 'positionnement'],
+      ['Mix marketing', 'Les 4 P : produit, prix, place, promotion', 'Le ____ combine produit, prix, place et promotion.', 'mix marketing'],
+      ['Taux de conversion', 'Part des visiteurs qui réalisent l\'action attendue', 'Le ____ mesure la part de visiteurs qui achètent ou s\'inscrivent.', 'taux de conversion'],
+      ['Fidélisation', 'Ensemble des actions pour garder les clients existants', 'La ____ vise à garder les clients existants sur la durée.', 'fidélisation'],
+      ['Proposition de valeur', 'Promesse de bénéfice faite au client', 'La ____ explique pourquoi un client choisit une offre.', 'proposition de valeur'],
+      ['Cible', 'Groupe de clients visé par une offre', 'Bien définir sa ____ évite de s\'adresser à tout le monde.', 'cible'],
+      ['Parcours client', 'Étapes vécues par un client avant et après l\'achat', 'Le ____ décrit chaque étape, de la découverte à l\'après-vente.', 'parcours client'],
+      ['Notoriété', 'Part du public qui connaît une marque', 'La ____ mesure la part du public qui connaît la marque.', 'notoriété']
+    ]
+  },
+  {
+    label: '💶 Finance d\'entreprise', keywords: ['finance', 'compta', 'bilan', 'tresorerie', 'invest'],
+    prompt: 'Les bases de la finance d\'entreprise', title: 'Finance (bases)', speakLang: '',
+    cards: [
+      ['Chiffre d\'affaires', 'Total des ventes réalisées sur une période', 'Le ____ correspond au total des ventes sur une période.', 'chiffre d\'affaires'],
+      ['Marge brute', 'Chiffre d\'affaires moins le coût d\'achat des marchandises vendues', 'La ____ est le chiffre d\'affaires moins le coût d\'achat des marchandises.', 'marge brute'],
+      ['Trésorerie', 'Argent immédiatement disponible', 'Une entreprise rentable peut manquer de ____ si ses clients paient tard.', 'trésorerie'],
+      ['Bilan', 'Photographie du patrimoine : actif et passif', 'Le ____ présente l\'actif et le passif de l\'entreprise à une date donnée.', 'bilan'],
+      ['Amortissement', 'Étalement du coût d\'un investissement sur sa durée d\'usage', 'L\'____ étale le coût d\'une machine sur plusieurs années.', 'amortissement'],
+      ['Point mort', 'Niveau d\'activité où le résultat est nul', 'Au ____, les ventes couvrent exactement les coûts.', 'point mort'],
+      ['EBITDA', 'Résultat avant intérêts, impôts, dépréciations et amortissements', 'L\'____ mesure la performance opérationnelle avant amortissements.', 'EBITDA'],
+      ['ROI', 'Retour sur investissement : gain rapporté à la somme investie', 'Le ____ compare le gain obtenu à la somme investie.', 'ROI'],
+      ['Dividende', 'Part du bénéfice versée aux actionnaires', 'Le ____ est la part du bénéfice reversée aux actionnaires.', 'dividende'],
+      ['Fonds de roulement', 'Ressources stables qui financent le cycle d\'exploitation', 'Le ____ finance les besoins courants de l\'activité.', 'fonds de roulement']
+    ]
+  },
+  {
+    label: '🇬🇧 Anglais du quotidien', keywords: ['quotidien', 'courant', 'general', 'vocabulaire anglais', 'daily'],
+    prompt: 'Anglais du quotidien et du travail', title: 'Anglais du quotidien', speakLang: 'en-GB',
+    cards: [
+      ['to book', 'réserver', 'I need to ____ a table for tonight.', 'book'],
+      ['deadline', 'date limite', 'The ____ for the report is Friday.', 'deadline'],
+      ['to improve', 'améliorer', 'I want to ____ my English this year.', 'improve'],
+      ['to borrow', 'emprunter', 'Can I ____ your pen for a minute?', 'borrow'],
+      ['although', 'bien que', '____ it was raining, we went for a walk.', 'Although'],
+      ['reliable', 'fiable', 'He is a very ____ colleague.', 'reliable'],
+      ['to cope with', 'faire face à', 'It is hard to ____ so much work.', 'cope with'],
+      ['bill', 'facture, addition', 'Could we have the ____, please?', 'bill'],
+      ['overtime', 'heures supplémentaires', 'She did two hours of ____ yesterday.', 'overtime'],
+      ['to run out of', 'ne plus avoir de', 'We have run ____ milk.', 'out of']
+    ]
+  },
+  {
+    label: '🇩🇪 Allemand de base', keywords: ['allemand', 'deutsch', 'berlin'],
+    prompt: 'Allemand de base pour voyager', title: 'Allemand (bases)', speakLang: 'de-DE',
+    cards: [
+      ['der Bahnhof', 'la gare', 'Wo ist der ____?', 'Bahnhof'],
+      ['das Wasser', 'l\'eau', 'Ein Glas ____, bitte.', 'Wasser'],
+      ['Danke', 'merci', '____ für Ihre Hilfe!', 'Danke'],
+      ['Bitte', 's\'il vous plaît / de rien', 'Einen Kaffee, ____.', 'bitte'],
+      ['die Rechnung', 'l\'addition', 'Die ____, bitte!', 'Rechnung'],
+      ['Entschuldigung', 'excusez-moi', '____, wo ist die Toilette?', 'Entschuldigung'],
+      ['das Brot', 'le pain', 'Ich esse ____ mit Butter.', 'Brot'],
+      ['der Flughafen', 'l\'aéroport', 'Der ____ ist weit von hier.', 'Flughafen'],
+      ['Guten Morgen', 'bonjour (le matin)', '____! Haben Sie gut geschlafen?', 'Guten Morgen'],
+      ['Wie viel kostet das?', 'combien ça coûte ?', '____ dieses Buch?', 'Wie viel kostet']
+    ]
   }
 ];
 
@@ -115,7 +179,13 @@ function plain(s) {
 // Cherche un thème préparé qui correspond à la demande ; null si aucun.
 export function generateDeck(prompt) {
   const p = plain(prompt);
-  const topic = AI_TOPICS.find(t => t.keywords.some(k => p.includes(k)) || p.includes(plain(t.title.split(' ')[0])));
+  let topic = AI_TOPICS.find(t => t.keywords.some(k => p.includes(k)) || p.includes(plain(t.title.split(' ')[0])));
+  // Une langue seule (« anglais », « italien »...) mène au thème le plus général de cette langue.
+  if (!topic) {
+    const byLang = { anglais: 'Anglais du quotidien', italien: 'Cuisine (italien)', espagnol: 'Voyage (espagnol)' };
+    const lang = Object.keys(byLang).find(l => p.includes(l));
+    if (lang) topic = AI_TOPICS.find(t => t.title === byLang[lang]);
+  }
   if (!topic) return null;
   return {
     title: topic.title,

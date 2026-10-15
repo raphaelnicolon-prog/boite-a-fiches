@@ -221,7 +221,7 @@ window.App = {
     if (aiLeft() <= 0) { state.showPaywall = true; refresh(); return; }
     const result = generateDeck(a.prompt);
     if (!result) {
-      a.error = 'Dans cette démo, l\'IA connaît quelques thèmes (football, cuisine italienne, voyage, conseil). Choisis une idée ci-dessous.';
+      a.error = 'Dans cette démo, l\'IA connaît seulement des thèmes préparés à l\'avance. Choisis une des idées ci-dessous.';
       refresh(); return;
     }
     a.error = ''; a.phase = 'loading'; refresh();

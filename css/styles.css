@@ -126,7 +126,7 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .list-item { background: var(--card); border-radius: 16px; padding: 12px 16px; margin-bottom: 10px; overflow-wrap: anywhere; }
 .card-actions { flex-shrink: 0; gap: 4px; }
 /* ---- bouton rond d'en-tête + écran Réglages ---- */
-.icon-btn { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: var(--card); color: var(--ink-soft); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); }
+.icon-btn { width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; background: var(--card); color: var(--ink-soft); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); }
 .settings-group { background: var(--card); border-radius: 16px; overflow: hidden; margin-bottom: 12px; }
 .settings-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; background: none; color: var(--ink); text-align: left; border-bottom: 1px solid var(--border); transition: background .15s ease; }
 .settings-row:last-child { border-bottom: none; }
@@ -219,6 +219,8 @@ button { font-family: inherit; cursor: pointer; border: none; }
 @keyframes confetti-fall { 0% { opacity: 1; transform: translateY(0) rotate(0deg); } 100% { opacity: 0; transform: translateY(260px) rotate(540deg); } }
 @media (prefers-reduced-motion: reduce) { .confetti { display: none; } }
 .tap { cursor: pointer; }
+.home-title { white-space: nowrap; }
+@media (max-width: 345px) { .home-title { white-space: normal; } }
 .update-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(92px + env(safe-area-inset-bottom, 0px)); z-index: 40; max-width: 420px; width: calc(100% - 28px); padding: 12px 16px; border-radius: 14px; background: var(--primary); color: #06222a; font-size: 13px; font-weight: 800; text-align: center; box-shadow: 0 8px 20px var(--shadow); cursor: pointer; }
 textarea.answer-input { font-family: inherit; resize: vertical; }
 .file-btn { display: inline-flex; align-items: center; cursor: pointer; }

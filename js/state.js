@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '24';
+export const APP_VERSION = '26';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
