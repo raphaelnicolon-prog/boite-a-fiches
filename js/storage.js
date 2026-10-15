@@ -5,9 +5,25 @@
 // Tant qu'on n'a pas ajouté de compte + synchronisation en ligne, tes fiches
 // créées sur ton téléphone ne se voient pas automatiquement sur ton ordinateur.
 
-import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS } from './state.js';
+import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES } from './state.js';
 
 const STORAGE_KEY = 'boite-fiches-data-v1';
+
+// Remet en forme des statistiques lues dans le stockage ou dans un fichier
+// importé : objectif parmi les valeurs autorisées, jours au format AAAA-MM-JJ
+// avec un nombre entier positif, et on ne garde que les ~400 derniers jours.
+export function sanitizeStats(raw) {
+  const stats = { goal: 10, days: {} };
+  if (!raw || typeof raw !== 'object') return stats;
+  if (GOAL_CHOICES.includes(raw.goal)) stats.goal = raw.goal;
+  if (raw.days && typeof raw.days === 'object') {
+    Object.keys(raw.days).sort().slice(-400).forEach(function (k) {
+      const n = raw.days[k];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && Number.isInteger(n) && n > 0 && n < 100000) stats.days[k] = n;
+    });
+  }
+  return stats;
+}
 
 export function loadData() {
   try {
@@ -24,6 +40,7 @@ export function loadData() {
         // Corbeille : on efface pour de bon ce qui a plus de TRASH_DAYS jours.
         const limit = Date.now() - TRASH_DAYS * 24 * 3600 * 1000;
         state.trash = Array.isArray(p.trash) ? p.trash.filter(t => t && Date.parse(t.deletedAt) > limit) : [];
+        state.stats = sanitizeStats(p.stats);
         return;
       }
     }
@@ -35,6 +52,7 @@ export function loadData() {
   state.decks = s.decks;
   state.cards = s.cards;
   state.trash = [];
+  state.stats = sanitizeStats(null);
   persist();
 }
 
@@ -44,7 +62,8 @@ export function persist() {
       rubriques: state.rubriques,
       decks: state.decks,
       cards: state.cards,
-      trash: state.trash
+      trash: state.trash,
+      stats: state.stats
     }));
   } catch (e) {
     console.error('Erreur de sauvegarde (stockage plein ou navigateur en mode privé ?)', e);
@@ -60,7 +79,8 @@ export function buildBackupJson() {
     exportedAt: new Date().toISOString(),
     rubriques: state.rubriques,
     decks: state.decks,
-    cards: state.cards
+    cards: state.cards,
+    stats: state.stats
   }, null, 2);
 }
 
@@ -122,5 +142,7 @@ export function parseBackup(text) {
   });
 
   const dropped = (p.rubriques.length - rubriques.length) + (p.decks.length - decks.length) + (p.cards.length - cards.length);
-  return { ok: true, data: { rubriques, decks, cards }, dropped };
+  // Une ancienne sauvegarde (avant les statistiques) n'a pas de 'stats' : null = on garde les tiennes.
+  const stats = p.stats ? sanitizeStats(p.stats) : null;
+  return { ok: true, data: { rubriques, decks, cards, stats }, dropped };
 }

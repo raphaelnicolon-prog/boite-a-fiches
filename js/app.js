@@ -3,7 +3,7 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES } from './state.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render } from './render.js';
 import { enableReorder } from './dragdrop.js';
@@ -78,6 +78,13 @@ function sendToTrash(type, name, payload) {
 }
 
 window.App = {
+  // ---- Objectif quotidien ----
+  setGoal(n) {
+    if (!GOAL_CHOICES.includes(n)) return;
+    state.stats.goal = n;
+    persist(); refresh();
+  },
+
   // ---- Confirmation ----
   cancelConfirm() { state.confirmDialog = null; refresh(); },
   acceptConfirm() {
@@ -357,6 +364,7 @@ window.App = {
         label: 'Remplacer', danger: true,
         onConfirm() {
           state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards; state.trash = [];
+          if (d.stats) state.stats = d.stats;
           state.view = 'home'; state.session = null; state.reorderMode = false;
           persist(); refresh();
         }

@@ -4,7 +4,7 @@
 
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
-  allDueCards, seedData
+  allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, last7Days
 } from './state.js';
 
 export function render() {
@@ -62,12 +62,36 @@ function renderSettings() {
   let html = '<button class="backbtn" onclick="App.backHome()">‹ Accueil</button>';
   html += '<div class="eyebrow">Boîte à Fiches</div><h1 class="title">Réglages</h1>';
   html += '<div class="subtitle">Tes fiches ne sont stockées que sur cet appareil : pense à les exporter de temps en temps.</div>';
+  html += '<div class="eyebrow" style="margin:0 0 8px;">Objectif quotidien</div><div class="card"><div class="rub-meta" style="margin:0 0 12px;">Nombre de cartes visé chaque jour : c\'est la barre de progression de l\'accueil.</div><div class="row">'
+    + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" onclick="App.setGoal(' + n + ')">' + n + '</button>'; }).join('')
+    + '</div></div>';
   html += '<div class="eyebrow" style="margin:0 0 8px;">Mes données</div><div class="settings-group">'
     + settingsRow('💾', 'Exporter mes fiches', 'Crée un fichier de sauvegarde', 'App.exportData()')
     + settingsRow('📥', 'Importer une sauvegarde', 'Remplace tes données par celles d\'un fichier', 'document.getElementById(\'import-file\').click()')
     + settingsRow('🗑️', 'Supprimé récemment', state.trash.length ? state.trash.length + ' élément(s) récupérable(s) pendant ' + TRASH_DAYS + ' jours' : 'Rien pour l\'instant', 'App.openTrash()')
     + '</div><input type="file" id="import-file" accept=".json,application/json" style="display:none;" onchange="App.importFile(this)"/>';
   return html;
+}
+
+// ---------- SÉRIE DE JOURS ET OBJECTIF ----------
+// Un « nudge » (coup de pouce) positif : on montre la progression et la série en
+// cours, sans jamais culpabiliser quand elle est à zéro.
+function renderStreakCard() {
+  const streak = currentStreak();
+  const done = reviewedToday();
+  const goal = state.stats.goal;
+  const pct = Math.min(100, Math.round(done / goal * 100));
+  const title = streak > 0 ? '🔥 ' + streak + ' jour' + (streak > 1 ? 's' : '') + ' d\'affilée' : 'Lance ta série';
+  const msg = done >= goal ? 'Objectif atteint, bravo 🎉'
+    : done > 0 ? done + ' / ' + goal + ' cartes aujourd\'hui'
+    : streak > 0 ? 'Révise une carte aujourd\'hui pour garder ta série'
+    : 'Révise une carte aujourd\'hui pour la démarrer';
+  const dots = last7Days().map(function (d) {
+    return '<div class="week-day"><div class="dot' + (d.count > 0 ? ' on' : '') + (d.isToday ? ' today' : '') + '"></div><span>' + d.letter + '</span></div>';
+  }).join('');
+  return '<div class="stat-card"><div class="row between"><div><div class="mode-title">' + title + '</div><div class="mode-desc">' + msg + '</div></div>'
+    + '<div class="week-dots">' + dots + '</div></div>'
+    + '<div class="goal-bar"><div class="goal-fill' + (done >= goal ? ' full' : '') + '" style="width:' + pct + '%;"></div></div></div>';
 }
 
 // ---------- ACCUEIL ----------
@@ -79,6 +103,7 @@ function renderHome() {
   let html = '<div class="row between" style="align-items:flex-start;"><div><div class="eyebrow">Boîte à Fiches</div><h1 class="title">Ton espace de révision</h1></div>'
     + '<button class="icon-btn" onclick="App.openSettings()" aria-label="Réglages">' + GEAR_ICON + '</button></div>';
   html += '<div class="subtitle">' + (totalDue > 0 ? totalDue + ' carte(s) à revoir aujourd\'hui, tous paquets confondus.' : 'Rien à revoir aujourd\'hui.') + '</div>';
+  html += renderStreakCard();
 
   if (totalDue > 0) {
     html += '<button class="card" style="width:100%;text-align:left;border:none;cursor:pointer;" onclick="App.startFlash(null,null,\'all-due\')">'

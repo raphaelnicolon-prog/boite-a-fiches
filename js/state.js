@@ -50,13 +50,22 @@ export const state = {
   editingCardId: null,
   showBulk: false,
   trash: [],            // éléments supprimés récemment (voir app.js : corbeille de 30 jours)
+  stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
   confirmDialog: null,  // { title, body, label, danger, onConfirm } : boîte de confirmation à l'écran
   pendingRubColor: 'sage', // couleur en cours de sélection dans la modale rubrique (ajout ou modif)
   session: null
 };
 
+// Date du jour dans le fuseau horaire de l'utilisateur, au format 2026-10-15.
+// (toISOString() donnerait la date UTC : entre minuit et 1h-2h du matin en France,
+// on serait encore "hier", ce qui fausserait la série de jours.)
+export function localDateStr(d) {
+  const date = d || new Date();
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr();
 }
 
 export function esc(s) {
@@ -173,5 +182,47 @@ export function scheduleCard(card, success) {
   const days = INTERVALS[card.box];
   const d = new Date();
   d.setDate(d.getDate() + days);
-  card.nextReview = d.toISOString().slice(0, 10);
+  card.nextReview = localDateStr(d);
+  recordReview();
+}
+
+// ---------- Statistiques : série de jours et objectif quotidien ----------
+export const GOAL_CHOICES = [5, 10, 20, 30];
+
+// Compte une carte révisée aujourd'hui (appelée à chaque réponse enregistrée).
+function recordReview() {
+  const t = todayStr();
+  state.stats.days[t] = (state.stats.days[t] || 0) + 1;
+}
+
+export function reviewedToday() {
+  return state.stats.days[todayStr()] || 0;
+}
+
+// Nombre de jours d'affilée avec au moins une carte révisée. Si tu n'as encore
+// rien fait aujourd'hui, la série reste vivante jusqu'à ce soir : on compte
+// à partir d'hier.
+export function currentStreak() {
+  const days = state.stats.days;
+  const d = new Date();
+  if (!days[localDateStr(d)]) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while (days[localDateStr(d)] > 0) {
+    n++;
+    d.setDate(d.getDate() - 1);
+  }
+  return n;
+}
+
+// Les 7 derniers jours (aujourd'hui en dernier) pour la petite frise de l'accueil.
+export function last7Days() {
+  const letters = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  const out = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = localDateStr(d);
+    out.push({ date: key, count: state.stats.days[key] || 0, letter: letters[d.getDay()], isToday: i === 0 });
+  }
+  return out;
 }
