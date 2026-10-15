@@ -23,6 +23,7 @@ export function render() {
   else if (state.view === 'ai') app.innerHTML = renderAi();
   else if (state.view === 'pitch') app.innerHTML = renderPitch();
   else if (state.view === 'stats') app.innerHTML = renderStats();
+  else if (state.view === 'search') app.innerHTML = renderSearch();
   else if (state.view === 'discover') app.innerHTML = renderDiscover();
   else if (state.view === 'multi') app.innerHTML = renderMulti();
   else if (state.view === 'duel') app.innerHTML = renderDuel();
@@ -69,6 +70,8 @@ function deckPickerTitle(r) {
 
 // Roue crantée (icône « settings » de la bibliothèque Feather, licence MIT).
 const GEAR_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
+const SEARCH_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
 
 // ---------- RÉGLAGES ----------
 function settingsRow(icon, title, desc, onclick) {
@@ -141,7 +144,8 @@ function renderHome() {
   const hiddenRubs = state.rubriques.filter(r => r.hidden);
 
   let html = '<div class="row between" style="align-items:flex-start;"><div><div class="eyebrow">Boîte à Fiches</div><h1 class="title">Ton espace de révision</h1></div>'
-    + '<button class="icon-btn" onclick="App.openSettings()" aria-label="Réglages">' + GEAR_ICON + '</button></div>';
+    + '<div class="row" style="gap:8px;"><button class="icon-btn" onclick="App.openSearch()" aria-label="Rechercher">' + SEARCH_ICON + '</button>'
+    + '<button class="icon-btn" onclick="App.openSettings()" aria-label="Réglages">' + GEAR_ICON + '</button></div></div>';
   html += '<div class="subtitle">' + (totalDue > 0 ? totalDue + ' carte(s) à revoir aujourd\'hui, tous paquets confondus.' : 'Rien à revoir aujourd\'hui.') + '</div>';
   html += renderStreakCard();
   html += renderReminderBanner();
@@ -205,6 +209,9 @@ function renderRubrique() {
   let html = '<button class="backbtn" onclick="App.backHome()">‹ Rubriques</button>';
   html += '<div class="eyebrow" style="color:' + colorVar(r.color) + ';">' + esc(r.name) + '</div><h1 class="title">' + deckPickerTitle(r) + '</h1>';
   html += aiButton(r);
+  const rubCards = decks.reduce((n, d) => n + cardsOf(d.id).length, 0);
+  if (rubCards >= 2) html += '<div class="mode-card medley" style="cursor:pointer;margin-bottom:16px;" onclick="App.openMedleyScope(\'R:' + r.id + '\')">'
+    + '<div><div class="mode-title">✨ Quizz Medley de la rubrique</div><div class="mode-desc">Mélange tous les paquets · ' + rubCards + ' cartes</div></div><span class="chev">›</span></div>';
   if (decks.length === 0) { html += '<div class="subtitle">Aucun paquet ici pour l\'instant — crée le premier.</div>'; }
   decks.forEach(function (d) {
     const due = dueCards(d.id).length;
@@ -276,7 +283,7 @@ function renderMedleyScope(deckId) {
     + '<div class="scope-row">'
     + '<button class="scope-opt" onclick="App.startMedley(\'' + deckId + '\',\'due\')">Seulement celles dues aujourd\'hui</button>'
     + '<button class="scope-opt" onclick="App.startMedley(\'' + deckId + '\',\'wide\')">Mélange plus large, même déjà sues</button>'
-    + '</div><button class="backbtn" onclick="App.openDeck(\'' + deckId + '\')" style="margin-top:16px;">‹ Annuler</button></div>';
+    + '</div><button class="backbtn" onclick="' + (deckId.indexOf('R:') === 0 ? 'App.openRubrique(\'' + deckId.slice(2) + '\')' : 'App.openDeck(\'' + deckId + '\')') + '" style="margin-top:16px;">‹ Annuler</button></div>';
 }
 
 // ---------- SESSION ----------
@@ -905,7 +912,8 @@ function sessionRecap() {
   const done = reviewedToday();
   const goal = state.stats.goal;
   const pct = Math.min(100, Math.round(done / goal * 100));
-  return '<div class="stat-card" style="width:100%;text-align:left;"><div class="mode-title">'
+  const confetti = done >= goal ? '<div class="confetti">' + '<i></i>'.repeat(16) + '</div>' : '';
+  return confetti + '<div class="stat-card" style="width:100%;text-align:left;"><div class="mode-title">'
     + (done >= goal ? '🎉 Objectif du jour atteint' : done + ' / ' + goal + ' cartes aujourd\'hui') + '</div>'
     + '<div class="mode-desc">🔥 ' + currentStreak() + ' jour(s) d\'affilée</div>'
     + '<div class="goal-bar"><div class="goal-fill' + (done >= goal ? ' full' : '') + '" style="width:' + pct + '%;"></div></div></div>';
@@ -942,4 +950,28 @@ function deckMastery(deckId) {
   const cards = cardsOf(deckId);
   if (cards.length === 0) return 0;
   return Math.round(cards.reduce((a, c) => a + Math.min(c.box, 5), 0) / (cards.length * 5) * 100);
+}
+
+// ---------- RECHERCHE DE CARTES ----------
+// Liste des cartes dont le recto ou le verso contient le texte cherché (exportée : app.js la met à jour en direct).
+export function searchResultsHtml(query) {
+  const plain = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const q = plain((query || '').trim());
+  if (q.length < 2) return '<div class="rub-meta">Tape au moins 2 lettres. ' + state.cards.length + ' cartes dans l\'appli.</div>';
+  const found = state.cards.filter(c => plain(c.front).includes(q) || plain(c.back).includes(q));
+  if (found.length === 0) return '<div class="rub-meta">Aucune carte trouvée pour « ' + esc(query) + ' ».</div>';
+  return '<div class="rub-meta" style="margin-bottom:8px;">' + found.length + ' résultat(s)' + (found.length > 30 ? ' (30 premiers affichés)' : '') + '</div>'
+    + found.slice(0, 30).map(function (c) {
+      const d = state.decks.find(x => x.id === c.deckId);
+      return '<div class="list-item tap" onclick="App.openDeckCards(\'' + c.deckId + '\')"><div class="rub-name">' + esc(c.front) + '</div>'
+        + '<div class="rub-meta">' + esc(c.back) + '</div><div class="rub-meta" style="color:var(--primary);">' + esc(d ? d.name : '') + '</div></div>';
+    }).join('');
+}
+
+function renderSearch() {
+  let html = '<button class="backbtn" onclick="App.backHome()">‹ Accueil</button>';
+  html += '<div class="eyebrow">Recherche</div><h1 class="title">Retrouver une carte</h1>';
+  html += '<input class="answer-input" style="max-width:none;text-align:left;margin:8px 0 14px;" id="search-q" placeholder="Un mot du recto ou du verso…" oninput="App.runSearch(this.value)" autocomplete="off" autocapitalize="off"/>';
+  html += '<div id="search-results">' + searchResultsHtml('') + '</div>';
+  return html;
 }

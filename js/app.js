@@ -7,7 +7,7 @@ import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, all
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
-import { render, friendResultsHtml } from './render.js';
+import { render, friendResultsHtml, searchResultsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
 
 function refresh() {
@@ -65,6 +65,24 @@ function prepareCurrentCard(s) {
 }
 
 const AI_TOPICS_LIST = AI_TOPICS;
+
+// Une « cible » de Medley est soit un paquet (son id), soit toute une rubrique ('R:' + id).
+function targetCards(target) {
+  if (target.indexOf('R:') === 0) {
+    const ids = state.decks.filter(d => d.rubriqueId === target.slice(2)).map(d => d.id);
+    return state.cards.filter(c => ids.includes(c.deckId));
+  }
+  return cardsOf(target);
+}
+function targetDue(target) {
+  const t = todayStr();
+  return targetCards(target).filter(c => c.nextReview <= t);
+}
+function targetName(target) {
+  if (target.indexOf('R:') === 0) { const r = state.rubriques.find(x => x.id === target.slice(2)); return r ? r.name : 'Rubrique'; }
+  const d = state.decks.find(x => x.id === target);
+  return d ? d.name : 'Paquet';
+}
 
 // Texte à trous sur une fiche de cours : retaper une définition entière à l'identique est
 // irréaliste. Pour les cartes dont le verso est une phrase assez longue et qui n'ont pas
@@ -422,6 +440,17 @@ window.App = {
   openTrash() { state.view = 'trash'; refresh(); },
   openPitch() { state.view = 'pitch'; refresh(); },
   openStats() { state.view = 'stats'; refresh(); },
+  openSearch() { state.view = 'search'; refresh(); },
+  // Pas de refresh() complet : il ferait perdre le focus de la barre de recherche.
+  runSearch(q) {
+    const el = document.getElementById('search-results');
+    if (el) el.innerHTML = searchResultsHtml(q);
+  },
+  openDeckCards(deckId) {
+    const d = state.decks.find(x => x.id === deckId);
+    if (!d) return;
+    state.currentRubriqueId = d.rubriqueId; state.currentDeckId = deckId; state.view = 'cards'; refresh();
+  },
   openDiscover() { state.view = 'discover'; state.openArticle = null; refresh(); },
   toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
 
@@ -664,15 +693,13 @@ window.App = {
     state.session = s; state.view = 'session'; refresh();
   },
   openMedleyScope(deckId) {
-    const deck = state.decks.find(d => d.id === deckId);
-    state.session = { mode: 'medley', deckId, deckName: deck.name, scopeChoicePending: true, queue: [], index: 0, reviewedCount: 0 };
+    state.session = { mode: 'medley', deckId, deckName: targetName(deckId), scopeChoicePending: true, queue: [], index: 0, reviewedCount: 0 };
     state.view = 'session'; refresh();
   },
   startMedley(deckId, scope) {
-    const deck = state.decks.find(d => d.id === deckId);
-    const pool = shuffle(scope === 'due' ? (dueCards(deckId).length ? dueCards(deckId) : cardsOf(deckId)) : cardsOf(deckId));
+    const pool = shuffle(scope === 'due' ? (targetDue(deckId).length ? targetDue(deckId) : targetCards(deckId)) : targetCards(deckId));
     ensureAutoCloze(pool);
-    const s = { mode: 'medley', deckId, deckName: deck.name, reviewedCount: 0, index: 0, scope };
+    const s = { mode: 'medley', deckId, deckName: targetName(deckId), reviewedCount: 0, index: 0, scope };
     if (pool.length >= 4) {
       const batch = pool.slice(0, Math.min(6, pool.length));
       s.phase = 'matching'; s.matchBatch = batch; s.pendingQueue = pool.slice(batch.length);
