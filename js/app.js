@@ -364,6 +364,7 @@ window.App = {
   // ---- Supprimé récemment ----
   openSettings() { state.view = 'settings'; refresh(); },
   openTrash() { state.view = 'trash'; refresh(); },
+  openPitch() { state.view = 'pitch'; refresh(); },
   restoreFromTrash(id) {
     const t = state.trash.find(x => x.id === id);
     if (!t) return;

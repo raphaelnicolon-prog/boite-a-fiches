@@ -19,6 +19,7 @@ export function render() {
   else if (state.view === 'trash') app.innerHTML = renderTrash();
   else if (state.view === 'settings') app.innerHTML = renderSettings();
   else if (state.view === 'ai') app.innerHTML = renderAi();
+  else if (state.view === 'pitch') app.innerHTML = renderPitch();
   else if (state.view === 'multi') app.innerHTML = renderMulti();
   else if (state.view === 'duel') app.innerHTML = renderDuel();
   else if (state.view === 'league') app.innerHTML = renderLeague();
@@ -82,6 +83,9 @@ function renderSettings() {
     + settingsRow('📥', 'Importer une sauvegarde', 'Remplace tes données par celles d\'un fichier', 'document.getElementById(\'import-file\').click()')
     + settingsRow('🗑️', 'Supprimé récemment', state.trash.length ? state.trash.length + ' élément(s) récupérable(s) pendant ' + TRASH_DAYS + ' jours' : 'Rien pour l\'instant', 'App.openTrash()')
     + '</div><input type="file" id="import-file" accept=".json,application/json" style="display:none;" onchange="App.importFile(this)"/>';
+  html += '<div class="eyebrow" style="margin:0 0 8px;">Projet</div><div class="settings-group">'
+    + settingsRow('📊', 'Présentation du projet', 'Modèle économique, rétention et feuille de route', 'App.openPitch()')
+    + '</div>';
   html += '<div class="eyebrow" style="margin:0 0 8px;">Démonstration</div><div class="settings-group">'
     + settingsRow('🎬', 'Charger les données de démo', 'Remplace tes fiches par un jeu d\'exemple complet', 'App.loadDemo()')
     + '</div>';
@@ -673,5 +677,82 @@ function renderFriends() {
   html += '<input class="answer-input" style="max-width:none;text-align:left;margin-bottom:12px;" id="friend-search" placeholder="Rechercher un pseudo (ex : Martin)" oninput="App.searchFriends(this.value)" autocomplete="off" autocapitalize="off" value="' + esc(state.friendQuery || '') + '"/>';
   html += '<div id="friend-results">' + friendResultsHtml(state.friendQuery) + '</div>';
   html += '<div class="rub-meta" style="margin-top:14px;">Prototype : annuaire fictif, les demandes sont acceptées automatiquement.</div>';
+  return html;
+}
+
+// ---------- PRÉSENTATION DU PROJET (modèle économique, rétention, feuille de route) ----------
+function pitchSection(num, title, body) {
+  return '<div class="pitch-sec"><div class="eyebrow">' + num + ' · ' + title + '</div>' + body + '</div>';
+}
+function pitchList(items) {
+  return '<ul class="pitch-list">' + items.map(i => '<li>' + i + '</li>').join('') + '</ul>';
+}
+
+function renderPitch() {
+  let html = '<button class="backbtn" onclick="App.openSettings()">‹ Réglages</button>';
+  html += '<div class="eyebrow">Boîte à Fiches</div><h1 class="title">Présentation du projet</h1>';
+  html += '<div class="subtitle">Une application de révision par petites sessions, pour le téléphone. Prototype, avec de vrais utilisateurs en test.</div>';
+
+  html += pitchSection('1', 'Le besoin', pitchList([
+    'Réviser <b>régulièrement</b> est difficile : fiches papier, applis de langues, cours dispersés.',
+    'Un besoin réel, vécu : réviser mes cours de dernière année et apprendre l\'italien.',
+    'Les temps morts (bus, train) sont inutilisés : sessions de quelques minutes.'
+  ]));
+
+  html += pitchSection('2', 'La solution', pitchList([
+    'Un <b>moteur de révision unique</b> pour deux usages : cours et langues.',
+    '5 modes (flashcard, QCM, texte à trous, appariement, Medley) et un seul score de maîtrise par carte.',
+    'Rappels espacés (méthode Leitner) : l\'appli te dit quoi réviser aujourd\'hui.',
+    '<b>Contenu créé en une phrase par l\'IA</b>, relu par l\'utilisateur avant ajout.'
+  ]));
+
+  html += pitchSection('3', 'Modèle économique : freemium',
+    '<table class="plan-table"><tr><th></th><th>Gratuit</th><th class="pro">Premium</th></tr>'
+    + '<tr><td>Cartes et révisions</td><td>illimitées</td><td class="pro">illimitées</td></tr>'
+    + '<tr><td>Générations IA</td><td>' + FREE_AI_PER_DAY + ' / jour</td><td class="pro">illimitées</td></tr>'
+    + '<tr><td>Duels et ligue</td><td>✓</td><td class="pro">✓</td></tr>'
+    + '<tr><td>Import de cours (PDF, photos)</td><td>—</td><td class="pro">bientôt</td></tr></table>'
+    + pitchList([
+      'Le quota porte sur l\'<b>IA</b>, pas sur les cartes : chaque génération a un coût réel (de l\'ordre du centime, à vérifier), le prix suit le coût.',
+      'Créer ses propres cartes reste illimité : c\'est le cœur de la valeur, il ne faut pas le frustrer.',
+      'Tarif d\'exemple : 4,99 € / mois (à tester auprès des utilisateurs).'
+    ]));
+
+  html += pitchSection('4', 'Autres sources de revenus', pitchList([
+    '<b>Affiliation</b> : liens vers des cours en ligne pertinents, selon la rubrique de l\'utilisateur.',
+    '<b>Lots sponsorisés</b> : un partenaire finance des lots (places de concert, chèques cadeaux) pour la ligue hebdomadaire.',
+    '<b>Offre établissements</b> (piste) : licence pour une promo ou une association, avec classement interne.'
+  ]));
+
+  html += pitchSection('5', 'Rétention : les « nudges »', pitchList([
+    '<b>Série de jours</b> et objectif quotidien avec barre de progression.',
+    '<b>Preuve sociale</b> : amis, duels et ligue hebdomadaire.',
+    '<b>Récompenses</b> : points, niveaux, badges, « le saviez-vous ? » quotidien.',
+    '<b>Par défaut utile</b> : la répétition espacée décide des cartes du jour à ta place.',
+    'À venir : rappel à l\'heure habituelle de révision.',
+    'Garde-fou : encourager sans culpabiliser, jamais de fausse urgence.'
+  ]));
+
+  html += pitchSection('6', 'Indicateurs à suivre (à valider en test)', pitchList([
+    'Retour des utilisateurs à J1, J7 et J30.',
+    'Utilisateurs actifs par semaine, cartes révisées par utilisateur.',
+    'Conversion gratuit vers Premium.',
+    'Coût IA par utilisateur actif, à comparer au revenu par utilisateur.'
+  ]));
+
+  html += pitchSection('7', 'Risques et limites', pitchList([
+    '<b>Coût de l\'IA</b> : plafond mensuel, quota par utilisateur, limite de débit.',
+    '<b>Démarrage à froid</b> du multijoueur : peu de joueurs connectés au début, donc duels différés et adversaire simulé.',
+    '<b>Données personnelles (RGPD)</b> : comptes, e-mails, suppression à la demande.',
+    '<b>Jeux-concours</b> : cadre légal français strict, sponsor et règlement nécessaires.',
+    '<b>Qualité de l\'IA</b> : erreurs possibles, d\'où la relecture avant ajout.'
+  ]));
+
+  html += pitchSection('8', 'Feuille de route',
+    '<div class="roadmap"><div class="road on"><b>Aujourd\'hui</b><span>Prototype : 5 modes de révision, séries, IA et multijoueur simulés, appli installable et hors-ligne</span></div>'
+    + '<div class="road"><b>Phase 2</b><span>Vrais comptes et amis, vraie IA via un serveur sécurisé, duels en temps réel, synchronisation entre appareils</span></div>'
+    + '<div class="road"><b>Phase 3</b><span>Import de cours (PDF, photos de notes), notifications de rappel, paiements, partenariats</span></div></div>');
+
+  html += '<div class="rub-meta" style="margin-top:6px;">Les fonctions IA, multijoueur, Premium et partenaires sont des maquettes fonctionnelles pour illustrer le modèle.</div>';
   return html;
 }

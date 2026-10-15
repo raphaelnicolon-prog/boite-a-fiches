@@ -191,6 +191,15 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .friend-row { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; }
 .online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); margin-right: 6px; opacity: .6; }
 .online-dot.on { background: var(--success); opacity: 1; }
+/* ---- présentation du projet ---- */
+.pitch-sec { background: var(--card); border-radius: 16px; padding: 14px 16px 12px; margin-bottom: 12px; }
+.pitch-list { margin: 8px 0 2px; padding-left: 18px; font-size: 13.5px; line-height: 1.5; }
+.pitch-list li { margin-bottom: 6px; }
+.pitch-list b { color: var(--primary); font-weight: 700; }
+.roadmap { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.road { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border-left: 3px solid var(--ink-soft); font-size: 13px; line-height: 1.4; }
+.road span { color: var(--ink-soft); }
+.road.on { border-left-color: var(--primary); }
 .fact-card { margin-top: 18px; padding: 14px 16px; border-radius: 16px; background: var(--card); }
 .manage-link { display: block; width: 100%; background: none; color: var(--ink-soft); font-size: 13px; font-weight: 600; text-decoration: underline; padding: 14px 0 4px; text-align: center; }
 .manage-link:active { opacity: .55; }
