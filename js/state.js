@@ -54,6 +54,7 @@ export const state = {
   meta: { premium: false, aiDays: {}, aiTotal: 0 }, // abonnement (démo) et générations IA utilisées par jour
   multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 }, // points de ligue du joueur
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
+  friendQuery: '',      // texte de la recherche d'amis
   ai: null,             // assistant IA en cours (formulaire, chargement, relecture)
   duel: null,           // partie multijoueur en cours (voir duel.js)
   showPaywall: false,

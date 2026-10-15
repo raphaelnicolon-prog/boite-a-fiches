@@ -5,9 +5,10 @@
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
   allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, last7Days,
-  aiLeft, FREE_AI_PER_DAY
+  aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek
 } from './state.js';
-import { AI_TOPICS, PARTNERS } from './demo.js';
+import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE } from './demo.js';
+import { leagueTable, QUESTIONS, TIME, POINTS } from './duel.js';
 
 export function render() {
   const app = document.getElementById('app');
@@ -18,6 +19,10 @@ export function render() {
   else if (state.view === 'trash') app.innerHTML = renderTrash();
   else if (state.view === 'settings') app.innerHTML = renderSettings();
   else if (state.view === 'ai') app.innerHTML = renderAi();
+  else if (state.view === 'multi') app.innerHTML = renderMulti();
+  else if (state.view === 'duel') app.innerHTML = renderDuel();
+  else if (state.view === 'league') app.innerHTML = renderLeague();
+  else if (state.view === 'friends') app.innerHTML = renderFriends();
   else if (state.view === 'session') app.innerHTML = renderSession();
   if (state.showAddRubrique) app.insertAdjacentHTML('beforeend', renderRubriqueModal(null));
   if (state.showEditRubrique) app.insertAdjacentHTML('beforeend', renderRubriqueModal(state.editingRubriqueId));
@@ -120,6 +125,9 @@ function renderHome() {
       + '<div class="row between"><div><div class="mode-title" style="color:var(--primary);">▶ Reprendre</div><div class="mode-desc">' + totalDue + ' carte(s) prêtes, toutes rubriques</div></div><span class="chev" style="color:var(--primary);">›</span></div></button>';
   }
 
+  html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;" onclick="App.openMulti()">'
+    + '<div><div class="mode-title">⚔️ Multijoueur</div><div class="mode-desc">Défie tes amis, grimpe dans la ligue</div></div><span class="chev">›</span></button>';
+
   html += '<div class="row between" style="margin:18px 0 8px;"><div class="eyebrow">Mes rubriques</div>'
     + '<button class="toggle-reorder" onclick="App.toggleReorder()">' + (state.reorderMode ? 'Terminé' : 'Réorganiser') + '</button></div>';
 
@@ -153,6 +161,8 @@ function renderHome() {
     });
   }
 
+  html += '<div class="fact-card"><div class="eyebrow">💡 Le saviez-vous ?</div><div class="rub-meta" style="margin-top:6px;font-size:13px;line-height:1.45;">'
+    + esc(FACTS[Math.floor(Date.now() / 86400000) % FACTS.length]) + '</div></div>';
   html += '<div class="fab" onclick="App.openAddRubrique()">+</div>';
   return html;
 }
@@ -521,4 +531,142 @@ function renderPaywall() {
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closePaywall()">Fermer</button>'
     + '<button class="btn" onclick="App.' + (prem ? 'downgradePremium' : 'upgradePremium') + '()">' + (prem ? 'Revenir au gratuit' : 'Essayer Premium') + '</button></div>'
     + '</div></div>';
+}
+
+// ---------- MULTIJOUEUR (prototype : adversaires simulés) ----------
+function avatar(name, big) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  const size = big ? 'width:64px;height:64px;font-size:26px;border-radius:18px;' : '';
+  return '<div class="badge" style="' + size + 'background:hsl(' + h + ',48%,42%);">' + esc(name.charAt(0).toUpperCase()) + '</div>';
+}
+
+function renderMulti() {
+  ensureWeek();
+  const lv = playerLevel();
+  const m = state.multi;
+  let html = '<button class="backbtn" onclick="App.backHome()">‹ Accueil</button>';
+  html += '<div class="eyebrow">Multijoueur</div><h1 class="title">Affronte tes amis</h1>';
+  html += '<div class="subtitle">Duels de QCM en direct, points et ligue de la semaine.</div>';
+  html += '<div class="stat-card"><div class="row">' + avatar('Toi')
+    + '<div><div class="mode-title">Toi · niveau ' + lv.level + '</div><div class="mode-desc">' + m.weekPoints + ' pts cette semaine · ' + m.wins + ' victoire(s) sur ' + m.played + ' duel(s)</div></div></div>'
+    + '<div class="badge-row">' + badgeList().map(function (b) {
+      return '<div class="badge-chip' + (b.earned ? ' on' : '') + '"><span>' + b.emoji + '</span><small>' + esc(b.label) + '</small></div>';
+    }).join('') + '</div></div>';
+  html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;" onclick="App.quickMatch()">'
+    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Un adversaire au hasard · 5 questions chronométrées</div></div><span class="chev">›</span></button>';
+  html += '<div class="mode-card" style="cursor:pointer;" onclick="App.openFriends()"><div><div class="mode-title">👥 Mes amis</div><div class="mode-desc">'
+    + (state.social.friends.length ? state.social.friends.length + ' ami(s) · cherche un pseudo pour en ajouter' : 'Cherche un pseudo pour ajouter un ami') + '</div></div><span class="chev">›</span></div>';
+  html += '<div class="mode-card" style="cursor:pointer;" onclick="App.openLeague()"><div><div class="mode-title">🏆 Classement</div><div class="mode-desc">Ligue de la semaine · se termine dans ' + daysLeftInWeek() + ' j</div></div><span class="chev">›</span></div>';
+  html += '<div class="rub-meta" style="margin-top:14px;">Prototype : les adversaires et le classement sont simulés. La version finale utiliserait de vrais comptes et un service temps réel.</div>';
+  return html;
+}
+
+function renderDuel() {
+  const d = state.duel;
+  if (!d) return renderMulti();
+  const back = '<button class="backbtn" onclick="App.openMulti()">‹ Quitter</button>';
+
+  if (d.phase === 'nodeck') {
+    return back + '<h1 class="title">Il manque des cartes</h1><div class="subtitle">Il faut un paquet d\'au moins 4 cartes pour lancer un duel.</div>';
+  }
+  const opp = d.opponent;
+  if (d.phase === 'search') {
+    return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.kind === 'friend' ? 'Défi' : 'Partie rapide') + '</div>'
+      + '<h1 class="title">' + (d.kind === 'friend' ? 'Invitation envoyée à ' + esc(opp.name) + '…' : 'Recherche d\'un adversaire…') + '</h1>'
+      + '<div class="spinner" style="margin-top:26px;"></div><div class="subtitle" style="margin-top:20px;">Thème : ' + esc(d.deckName) + '</div>'
+      + '<button class="link" onclick="App.openMulti()">Annuler</button></div>';
+  }
+  if (d.phase === 'found') {
+    return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.kind === 'friend' ? opp.name + ' a accepté' : 'Adversaire trouvé') + '</div>'
+      + avatar(opp.name, true) + '<h1 class="title" style="margin-top:14px;">' + esc(opp.name) + '</h1>'
+      + '<div class="subtitle">Niveau ' + opp.level + ' · en ligne · thème : ' + esc(d.deckName) + '</div><div class="spinner"></div>'
+      + '<div class="hint">Le duel commence…</div></div>';
+  }
+  if (d.phase === 'end') {
+    const r = d.result;
+    const title = r.outcome === 'win' ? 'Victoire 🎉' : r.outcome === 'loss' ? 'Défaite…' : 'Égalité';
+    return '<div class="center" style="padding-top:30px;"><div class="eyebrow">Résultat</div><h1 class="title">' + title + '</h1>'
+      + '<div class="duel-final"><div><div class="duel-name">Toi</div><div class="duel-score">' + d.me.score + '</div></div>'
+      + '<div class="duel-vs">vs</div><div><div class="duel-name">' + esc(opp.name) + '</div><div class="duel-score">' + d.opp.score + '</div></div></div>'
+      + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue</div>'
+      + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement cette semaine' + (r.rank <= 5 ? ' · dans la zone des lots 🎁' : '') + '</div></div>'
+      + '<div class="row" style="margin-top:18px;"><button class="btn" onclick="App.duelRematch()">Revanche</button>'
+      + '<button class="btn ghost" onclick="App.openLeague()">Classement</button></div>'
+      + '<button class="link" style="margin-top:18px;" onclick="App.openMulti()">Retour au multijoueur</button></div>';
+  }
+
+  // question / reveal
+  const q = d.q;
+  const qu = d.questions[d.index];
+  const revealed = d.phase === 'reveal';
+  const opts = qu.options.map(function (o, i) {
+    let cls = 'opt';
+    if (revealed) cls += i === qu.correct ? ' correct' : (i === q.meIdx ? ' wrong' : ' dim');
+    else if (q.meIdx === i) cls += ' picked';
+    return '<button class="' + cls + '" ' + (q.meAnswered || revealed ? '' : 'onclick="App.duelAnswer(' + i + ')"') + '>' + esc(o) + '</button>';
+  }).join('');
+  const status = revealed
+    ? (q.meAnswered ? (q.meCorrect ? 'Bonne réponse ✓' : 'Raté ✗') : 'Temps écoulé') + ' · ' + opp.name + (q.oppAnswered ? (q.oppCorrect ? ' a eu juste' : ' s\'est trompé') : ' n\'a pas répondu')
+    : (q.meAnswered ? 'En attente de ' + opp.name + '…' : (q.oppAnswered ? opp.name + ' a répondu ✓' : opp.name + ' réfléchit…'));
+  return '<div class="duel-head"><div class="duel-side"><span class="duel-name">Toi</span><span class="duel-score" id="duel-score-me">' + d.me.score + '</span></div>'
+    + '<div class="duel-mid">' + (d.index + 1) + ' / ' + d.questions.length + '<div class="duel-num" id="duel-timer-num">' + Math.ceil(Math.max(q.timeLeft, 0)) + '</div></div>'
+    + '<div class="duel-side"><span class="duel-name">' + esc(opp.name) + '</span><span class="duel-score" id="duel-score-opp">' + d.opp.score + '</span></div></div>'
+    + '<div class="goal-bar"><div class="goal-fill" id="duel-timer-fill" style="transition:none;width:' + Math.max(0, q.timeLeft / TIME * 100) + '%;"></div></div>'
+    + '<div class="center"><div class="qtext" style="margin-top:24px;">' + esc(qu.front) + '</div>'
+    + '<div class="opt-grid">' + opts + '</div>'
+    + '<div class="hint" id="duel-opp-status" style="margin-top:16px;">' + esc(status) + '</div></div>';
+}
+
+function renderLeague() {
+  const rows = leagueTable();
+  let html = '<button class="backbtn" onclick="App.openMulti()">‹ Multijoueur</button>';
+  html += '<div class="eyebrow">Ligue de la semaine</div><h1 class="title">Classement</h1>';
+  html += '<div class="subtitle">Se termine dans ' + daysLeftInWeek() + ' jour(s). Victoire : +' + POINTS.win + ' pts, égalité : +' + POINTS.draw + ', défaite : +' + POINTS.loss + '.</div>';
+  html += '<div class="prize-card"><span class="settings-ic">🎁</span><div><div class="mode-title">Lot du mois · partenaire</div>'
+    + '<div class="mode-desc">Les 5 premiers participent au tirage au sort : 2 places de concert (exemple de lot).</div></div></div>';
+  html += '<div class="settings-group">';
+  rows.forEach(function (r, i) {
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    html += '<div class="league-row' + (r.me ? ' me' : '') + (i === 5 ? ' cut' : '') + '"><span class="rank">' + medal + '</span>'
+      + '<span class="league-name">' + esc(r.name) + (i < 5 ? ' <span title="Zone des lots">🎁</span>' : '') + '</span><span class="league-pts">' + r.points + ' pts</span></div>';
+  });
+  html += '</div><div class="rub-meta">Classement de démonstration : les autres joueurs sont fictifs.</div>';
+  return html;
+}
+
+// ---------- AMIS (prototype : annuaire fictif) ----------
+function friendRow(p) {
+  const isFriend = state.social.friends.includes(p.name);
+  const pending = !!state.social.pending[p.name];
+  let action;
+  if (isFriend) action = p.online ? '<button class="btn" onclick="App.challengeFriend(\'' + esc(p.name) + '\')">Défier</button>' : '<span class="rub-meta" style="margin:0;">Hors ligne</span>';
+  else if (pending) action = '<span class="rub-meta" style="margin:0;">Demande envoyée…</span>';
+  else action = '<button class="btn ghost" onclick="App.addFriend(\'' + esc(p.name) + '\')">Ajouter</button>';
+  return '<div class="friend-row">' + avatar(p.name) + '<div style="flex:1;min-width:0;"><div class="rub-name">' + esc(p.name) + '</div>'
+    + '<div class="rub-meta"><span class="online-dot' + (p.online ? ' on' : '') + '"></span>' + (p.online ? 'en ligne' : 'hors ligne') + ' · niveau ' + p.level + (isFriend ? ' · ami' : '') + '</div></div>' + action + '</div>';
+}
+
+// Liste affichée sous la barre de recherche (exportée : app.js la met à jour en direct).
+export function friendResultsHtml(query) {
+  const q = (query || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const plain = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (q) {
+    const found = DEMO_PEOPLE.filter(p => plain(p.name).includes(q));
+    return found.length ? found.map(friendRow).join('') : '<div class="rub-meta">Aucun joueur trouvé pour « ' + esc(query) + ' ».</div>';
+  }
+  const friends = DEMO_PEOPLE.filter(p => state.social.friends.includes(p.name));
+  const others = DEMO_PEOPLE.filter(p => !state.social.friends.includes(p.name)).slice(0, 4);
+  return '<div class="eyebrow" style="margin:6px 0 8px;">Mes amis (' + friends.length + ')</div>'
+    + (friends.length ? friends.map(friendRow).join('') : '<div class="rub-meta" style="margin-bottom:10px;">Pas encore d\'ami : cherche un pseudo ci-dessus.</div>')
+    + '<div class="eyebrow" style="margin:18px 0 8px;">Suggestions</div>' + others.map(friendRow).join('');
+}
+
+function renderFriends() {
+  let html = '<button class="backbtn" onclick="App.openMulti()">‹ Multijoueur</button>';
+  html += '<div class="eyebrow">Multijoueur</div><h1 class="title">Mes amis</h1>';
+  html += '<input class="answer-input" style="max-width:none;text-align:left;margin-bottom:12px;" id="friend-search" placeholder="Rechercher un pseudo (ex : Martin)" oninput="App.searchFriends(this.value)" autocomplete="off" autocapitalize="off" value="' + esc(state.friendQuery || '') + '"/>';
+  html += '<div id="friend-results">' + friendResultsHtml(state.friendQuery) + '</div>';
+  html += '<div class="rub-meta" style="margin-top:14px;">Prototype : annuaire fictif, les demandes sont acceptées automatiquement.</div>';
+  return html;
 }

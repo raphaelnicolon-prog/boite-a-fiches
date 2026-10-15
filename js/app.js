@@ -3,10 +3,11 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft } from './state.js';
-import { generateDeck, demoDataset, AI_TOPICS } from './demo.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek } from './state.js';
+import { generateDeck, demoDataset, AI_TOPICS, DEMO_PEOPLE } from './demo.js';
+import { startDuel, stopDuel, answer as duelAnswerFn, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
-import { render } from './render.js';
+import { render, friendResultsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
 
 function refresh() {
@@ -86,6 +87,42 @@ window.App = {
     if (!GOAL_CHOICES.includes(n)) return;
     state.stats.goal = n;
     persist(); refresh();
+  },
+
+  // ---- Multijoueur (prototype : adversaires simulés, voir duel.js) ----
+  openMulti() { stopDuel(); state.view = 'multi'; refresh(); },
+  quickMatch() { state.view = 'duel'; startDuel(null); },
+  duelAnswer(i) { duelAnswerFn(i); },
+  duelRematch() {
+    const d = state.duel;
+    if (!d) return;
+    startDuel({ opponent: d.opponent, deckId: d.deckId, skipSearch: true });
+  },
+  openLeague() { stopDuel(); state.view = 'league'; refresh(); },
+  openFriends() { stopDuel(); state.view = 'friends'; state.friendQuery = ''; refresh(); },
+  // Pas de refresh() complet : il ferait perdre le focus de la barre de recherche.
+  searchFriends(q) {
+    state.friendQuery = q;
+    const el = document.getElementById('friend-results');
+    if (el) el.innerHTML = friendResultsHtml(q);
+  },
+  addFriend(name) {
+    if (state.social.friends.includes(name) || state.social.pending[name]) return;
+    state.social.pending[name] = true;
+    this.searchFriends(state.friendQuery);
+    // Démo : la demande est « acceptée » au bout de 2 secondes.
+    setTimeout(() => {
+      delete state.social.pending[name];
+      if (!state.social.friends.includes(name)) state.social.friends.push(name);
+      persist();
+      if (state.view === 'friends') this.searchFriends(state.friendQuery);
+    }, 1800);
+  },
+  challengeFriend(name) {
+    const p = DEMO_PEOPLE.find(x => x.name === name);
+    if (!p) return;
+    state.view = 'duel';
+    startDuel({ opponent: p });
   },
 
   // ---- Assistant IA (simulé : voir demo.js) ----
@@ -183,7 +220,7 @@ window.App = {
   showRubrique(id) { const r = state.rubriques.find(x => x.id === id); if (r) { r.hidden = false; persist(); refresh(); } },
   openRubrique(id) { state.currentRubriqueId = id; state.view = 'rubrique'; refresh(); },
   openDeck(id) { state.currentDeckId = id; state.view = 'modes'; refresh(); },
-  backHome() { state.view = 'home'; state.session = null; refresh(); },
+  backHome() { stopDuel(); state.view = 'home'; state.session = null; refresh(); },
 
   // ---- Rubriques (création + modification) ----
   openAddRubrique() {
@@ -598,6 +635,8 @@ document.addEventListener('touchstart', function () {}, { passive: true });
 
 // ---- Démarrage de l'appli ----
 loadData();
+ensureWeek();
+setRefresh(refresh);
 refresh();
 
 if ('serviceWorker' in navigator) {

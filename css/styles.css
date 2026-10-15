@@ -164,6 +164,33 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .plan-table th, .plan-table td { padding: 8px 4px; text-align: center; border-bottom: 1px solid var(--border); }
 .plan-table th:first-child, .plan-table td:first-child { text-align: left; }
 .plan-table .pro { color: var(--primary); font-weight: 700; }
+/* ---- multijoueur : badges, duel, ligue, amis ---- */
+.badge-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.badge-chip { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; border-radius: 12px; background: var(--bg); opacity: .38; text-align: center; }
+.badge-chip.on { opacity: 1; background: rgba(53, 205, 191, 0.14); }
+.badge-chip span { font-size: 20px; }
+.badge-chip small { font-size: 9.5px; font-weight: 600; color: var(--ink-soft); line-height: 1.2; }
+.duel-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+.duel-side { display: flex; flex-direction: column; align-items: center; min-width: 84px; }
+.duel-name { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.duel-score { font-size: 26px; font-weight: 800; }
+.duel-mid { text-align: center; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.duel-num { font-size: 22px; font-weight: 800; color: var(--primary); }
+.duel-final { display: flex; align-items: center; gap: 22px; margin-top: 10px; }
+.duel-vs { color: var(--ink-soft); font-weight: 700; }
+.opt.picked { border-color: var(--primary); background: rgba(53, 205, 191, 0.16); }
+.league-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.league-row:last-child { border-bottom: none; }
+.league-row.me { background: rgba(53, 205, 191, 0.14); font-weight: 800; }
+.league-row.cut { border-top: 2px dashed var(--ink-soft); }
+.rank { width: 26px; text-align: center; font-weight: 800; color: var(--ink-soft); }
+.league-name { flex: 1; }
+.league-pts { color: var(--ink-soft); font-weight: 700; }
+.prize-card { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1.5px dashed var(--gold); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; }
+.friend-row { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; }
+.online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-soft); margin-right: 6px; opacity: .6; }
+.online-dot.on { background: var(--success); opacity: 1; }
+.fact-card { margin-top: 18px; padding: 14px 16px; border-radius: 16px; background: var(--card); }
 .manage-link { display: block; width: 100%; background: none; color: var(--ink-soft); font-size: 13px; font-weight: 600; text-decoration: underline; padding: 14px 0 4px; text-align: center; }
 .manage-link:active { opacity: .55; }
 
