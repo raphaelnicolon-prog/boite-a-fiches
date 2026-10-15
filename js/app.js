@@ -165,11 +165,15 @@ window.App = {
   },
 
   // ---- Assistant IA (simulé : voir demo.js) ----
-  openAi(rubriqueId) {
-    state.ai = { rubriqueId, prompt: '', phase: 'form', error: '', result: null, selected: [] };
+  openAi(rubriqueId, source, from) {
+    state.ai = { rubriqueId, source: source || 'prompt', from: from || 'rubrique', prompt: '', phase: 'form', error: '', result: null, selected: [] };
     state.view = 'ai'; refresh();
   },
-  leaveAi() { state.view = 'rubrique'; state.ai = null; refresh(); },
+  leaveAi() {
+    const fromCreate = state.ai && state.ai.from === 'create';
+    state.view = fromCreate ? 'create' : 'rubrique';
+    state.ai = null; refresh();
+  },
   setAiSource(src) {
     if (!state.ai) return;
     // On garde ce qui a été saisi avant de changer d'onglet.
@@ -296,6 +300,38 @@ window.App = {
   openRubrique(id) { state.currentRubriqueId = id; state.view = 'rubrique'; refresh(); },
   openDeck(id) { state.currentDeckId = id; state.view = 'modes'; refresh(); },
   backHome() { stopDuel(); state.view = 'home'; state.session = null; refresh(); },
+
+  // ---- Barre d'onglets ----
+  goTab(tab) {
+    stopDuel();
+    state.session = null;
+    const roots = { learn: 'home', play: 'multi', create: 'create', progress: 'stats', profile: 'settings' };
+    state.view = roots[tab] || 'home';
+    if (tab === 'play') state.friendQuery = '';
+    refresh();
+    window.scrollTo(0, 0);
+  },
+  // Sélecteur de l'onglet « Jouer » : Duels, Classement ou Amis.
+  goPlay(view) {
+    if (view === 'league') this.openLeague();
+    else if (view === 'friends') this.openFriends();
+    else this.openMulti();
+  },
+
+  // ---- Onglet « Créer » ----
+  setCreateRubrique(id) { state.createRubriqueId = id; refresh(); },
+  createAi(source) {
+    const rubs = state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order);
+    const cur = rubs.find(r => r.id === state.createRubriqueId) || rubs[0];
+    if (cur) this.openAi(cur.id, source, 'create');
+  },
+  createDeck() {
+    const rubs = state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order);
+    const cur = rubs.find(r => r.id === state.createRubriqueId) || rubs[0];
+    if (!cur) return;
+    state.currentRubriqueId = cur.id; // le paquet créé sera rangé dans cette rubrique
+    this.openAddDeck();
+  },
 
   // ---- Rubriques (création + modification) ----
   openAddRubrique() {
@@ -451,7 +487,6 @@ window.App = {
     if (!d) return;
     state.currentRubriqueId = d.rubriqueId; state.currentDeckId = deckId; state.view = 'cards'; refresh();
   },
-  openDiscover() { state.view = 'discover'; state.openArticle = null; refresh(); },
   toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
 
   // ---- Accueil de la première ouverture ----
