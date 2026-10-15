@@ -5,9 +5,10 @@
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
   allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, last7Days,
-  aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek
+  aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
+  weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak
 } from './state.js';
-import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE } from './demo.js';
+import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE, ARTICLES } from './demo.js';
 import { leagueTable, POINTS, DUEL_MODES } from './duel.js';
 
 export function render() {
@@ -20,6 +21,8 @@ export function render() {
   else if (state.view === 'settings') app.innerHTML = renderSettings();
   else if (state.view === 'ai') app.innerHTML = renderAi();
   else if (state.view === 'pitch') app.innerHTML = renderPitch();
+  else if (state.view === 'stats') app.innerHTML = renderStats();
+  else if (state.view === 'discover') app.innerHTML = renderDiscover();
   else if (state.view === 'multi') app.innerHTML = renderMulti();
   else if (state.view === 'duel') app.innerHTML = renderDuel();
   else if (state.view === 'league') app.innerHTML = renderLeague();
@@ -33,6 +36,7 @@ export function render() {
   if (state.showEditCard) app.insertAdjacentHTML('beforeend', renderCardModal(state.editingCardId));
   if (state.showBulk) app.insertAdjacentHTML('beforeend', renderBulkModal());
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
+  if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
   // Toujours en dernier : la confirmation doit passer au-dessus de toute autre fenêtre.
   if (state.confirmDialog) app.insertAdjacentHTML('beforeend', renderConfirmDialog());
 }
@@ -75,6 +79,13 @@ function renderSettings() {
   html += '<div class="eyebrow" style="margin:0 0 8px;">Objectif quotidien</div><div class="card"><div class="rub-meta" style="margin:0 0 12px;">Nombre de cartes visé chaque jour : c\'est la barre de progression de l\'accueil.</div><div class="row">'
     + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" onclick="App.setGoal(' + n + ')">' + n + '</button>'; }).join('')
     + '</div></div>';
+  const rem = state.meta.reminder;
+  html += '<div class="eyebrow" style="margin:0 0 8px;">Profil et rappel</div><div class="settings-group">'
+    + settingsRow(esc(state.profile.avatar), 'Mon profil', 'Pseudo : ' + esc(state.profile.pseudo) + ' · avatar', 'App.openProfile()')
+    + '</div><div class="card"><div class="row between"><div><div class="mode-title">⏰ Rappel quotidien</div><div class="mode-desc">Une bannière sur l\'accueil à l\'heure choisie, tant que ton objectif n\'est pas atteint.</div></div>'
+    + '<button class="chip' + (rem.on ? ' sel' : '') + '" onclick="App.toggleReminder()">' + (rem.on ? 'Activé' : 'Désactivé') + '</button></div>'
+    + '<div class="row" style="margin-top:12px;"><span class="rub-meta" style="margin:0;">Heure</span><input type="time" class="time-input" id="reminder-time" value="' + esc(rem.time) + '" onchange="App.setReminderTime(this.value)"/></div>'
+    + '<div class="rub-meta" style="margin-top:10px;">Les notifications sur téléphone fermé arriveront avec les comptes (phase 2).</div></div>';
   html += '<div class="eyebrow" style="margin:0 0 8px;">Abonnement</div><div class="settings-group">'
     + settingsRow('💎', 'Premium', state.meta.premium ? 'Actif (démo) · générations IA illimitées' : FREE_AI_PER_DAY + ' générations IA gratuites par jour · en savoir plus', 'App.openPaywall()')
     + '</div>';
@@ -108,9 +119,10 @@ function renderStreakCard() {
   const dots = last7Days().map(function (d) {
     return '<div class="week-day"><div class="dot' + (d.count > 0 ? ' on' : '') + (d.isToday ? ' today' : '') + '"></div><span>' + d.letter + '</span></div>';
   }).join('');
-  return '<div class="stat-card"><div class="row between"><div><div class="mode-title">' + title + '</div><div class="mode-desc">' + msg + '</div></div>'
+  return '<div class="stat-card tap" onclick="App.openStats()"><div class="row between"><div><div class="mode-title">' + title + '</div><div class="mode-desc">' + msg + '</div></div>'
     + '<div class="week-dots">' + dots + '</div></div>'
-    + '<div class="goal-bar"><div class="goal-fill' + (done >= goal ? ' full' : '') + '" style="width:' + pct + '%;"></div></div></div>';
+    + '<div class="goal-bar"><div class="goal-fill' + (done >= goal ? ' full' : '') + '" style="width:' + pct + '%;"></div></div>'
+    + '<div class="stat-more">Mes statistiques ›</div></div>';
 }
 
 // ---------- ACCUEIL ----------
@@ -123,6 +135,7 @@ function renderHome() {
     + '<button class="icon-btn" onclick="App.openSettings()" aria-label="Réglages">' + GEAR_ICON + '</button></div>';
   html += '<div class="subtitle">' + (totalDue > 0 ? totalDue + ' carte(s) à revoir aujourd\'hui, tous paquets confondus.' : 'Rien à revoir aujourd\'hui.') + '</div>';
   html += renderStreakCard();
+  html += renderReminderBanner();
 
   if (totalDue > 0) {
     html += '<button class="card" style="width:100%;text-align:left;border:none;cursor:pointer;" onclick="App.startFlash(null,null,\'all-due\')">'
@@ -165,8 +178,8 @@ function renderHome() {
     });
   }
 
-  html += '<div class="fact-card"><div class="eyebrow">💡 Le saviez-vous ?</div><div class="rub-meta" style="margin-top:6px;font-size:13px;line-height:1.45;">'
-    + esc(FACTS[Math.floor(Date.now() / 86400000) % FACTS.length]) + '</div></div>';
+  html += '<div class="fact-card tap" onclick="App.openDiscover()"><div class="eyebrow">💡 Le saviez-vous ?</div><div class="rub-meta" style="margin-top:6px;font-size:13px;line-height:1.45;">'
+    + esc(FACTS[Math.floor(Date.now() / 86400000) % FACTS.length]) + '</div><div class="stat-more">Lire les articles ›</div></div>';
   html += '<div class="fab" onclick="App.openAddRubrique()">+</div>';
   return html;
 }
@@ -552,8 +565,8 @@ function renderMulti() {
   let html = '<button class="backbtn" onclick="App.backHome()">‹ Accueil</button>';
   html += '<div class="eyebrow">Multijoueur</div><h1 class="title">Affronte tes amis</h1>';
   html += '<div class="subtitle">Duels de QCM en direct, points et ligue de la semaine.</div>';
-  html += '<div class="stat-card"><div class="row">' + avatar('Toi')
-    + '<div><div class="mode-title">Toi · niveau ' + lv.level + '</div><div class="mode-desc">' + m.weekPoints + ' pts cette semaine · ' + m.wins + ' victoire(s) sur ' + m.played + ' duel(s)</div></div></div>'
+  html += '<div class="stat-card tap" onclick="App.openProfile()"><div class="row">' + meAvatar()
+    + '<div><div class="mode-title">' + esc(state.profile.pseudo) + ' · niveau ' + lv.level + '</div><div class="mode-desc">' + m.weekPoints + ' pts cette semaine · ' + m.wins + ' victoire(s) sur ' + m.played + ' duel(s)</div></div></div>'
     + '<div class="badge-row">' + badgeList().map(function (b) {
       return '<div class="badge-chip' + (b.earned ? ' on' : '') + '"><span>' + b.emoji + '</span><small>' + esc(b.label) + '</small></div>';
     }).join('') + '</div></div>';
@@ -594,7 +607,7 @@ function renderDuel() {
     const r = d.result;
     const title = r.outcome === 'win' ? 'Victoire 🎉' : r.outcome === 'loss' ? 'Défaite…' : 'Égalité';
     return '<div class="center" style="padding-top:30px;"><div class="eyebrow">Résultat</div><h1 class="title">' + title + '</h1>'
-      + '<div class="duel-final"><div><div class="duel-name">Toi</div><div class="duel-score">' + d.me.score + '</div></div>'
+      + '<div class="duel-final"><div><div class="duel-name">' + esc(state.profile.pseudo) + '</div><div class="duel-score">' + d.me.score + '</div></div>'
       + '<div class="duel-vs">vs</div><div><div class="duel-name">' + esc(opp.name) + '</div><div class="duel-score">' + d.opp.score + '</div></div></div>'
       + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue</div>'
       + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement cette semaine' + (r.rank <= 5 ? ' · dans la zone des lots 🎁' : '') + '</div></div>'
@@ -616,7 +629,7 @@ function renderDuel() {
   const status = revealed
     ? (q.meAnswered ? (q.meCorrect ? 'Bonne réponse ✓' : 'Raté ✗') : 'Temps écoulé') + ' · ' + opp.name + (q.oppAnswered ? (q.oppCorrect ? ' a eu juste' : ' s\'est trompé') : ' n\'a pas répondu')
     : (q.meAnswered ? 'En attente de ' + opp.name + '…' : (q.oppAnswered ? opp.name + ' a répondu ✓' : opp.name + ' réfléchit…'));
-  return '<div class="duel-head"><div class="duel-side"><span class="duel-name">Toi</span><span class="duel-score" id="duel-score-me">' + d.me.score + '</span></div>'
+  return '<div class="duel-head"><div class="duel-side"><span class="duel-name">' + esc(state.profile.pseudo) + '</span><span class="duel-score" id="duel-score-me">' + d.me.score + '</span></div>'
     + '<div class="duel-mid">' + (d.index + 1) + ' / ' + d.questions.length + '<div class="duel-num" id="duel-timer-num">' + Math.ceil(Math.max(q.timeLeft, 0)) + '</div></div>'
     + '<div class="duel-side"><span class="duel-name">' + esc(opp.name) + '</span><span class="duel-score" id="duel-score-opp">' + d.opp.score + '</span></div></div>'
     + '<div class="goal-bar"><div class="goal-fill" id="duel-timer-fill" style="transition:none;width:' + Math.max(0, q.timeLeft / q.time * 100) + '%;"></div></div>'
@@ -754,5 +767,79 @@ function renderPitch() {
     + '<div class="road"><b>Phase 3</b><span>Import de cours (PDF, photos de notes), notifications de rappel, paiements, partenariats</span></div></div>');
 
   html += '<div class="rub-meta" style="margin-top:6px;">Les fonctions IA, multijoueur, Premium et partenaires sont des maquettes fonctionnelles pour illustrer le modèle.</div>';
+  return html;
+}
+
+// ---------- AVATAR DU JOUEUR, PROFIL, RAPPEL ----------
+function meAvatar(big) {
+  const size = big ? 'width:64px;height:64px;font-size:30px;border-radius:18px;' : 'font-size:20px;';
+  return '<div class="badge" style="' + size + 'background:var(--bg);">' + esc(state.profile.avatar) + '</div>';
+}
+
+function renderProfileModal() {
+  return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeProfile()"><div class="modal">'
+    + '<div class="eyebrow">Mon profil</div>'
+    + '<div class="rub-meta" style="margin-top:8px;">Ton pseudo et ton avatar sont visibles dans les duels et le classement.</div>'
+    + '<label>Pseudo (2 à 16 caractères)</label><input id="profile-pseudo" maxlength="16" value="' + esc(state.profile.pseudo) + '" autocomplete="off"/>'
+    + '<label>Avatar (un emoji)</label><input id="profile-avatar" maxlength="8" value="' + esc(state.profile.avatar) + '" placeholder="🙂"/>'
+    + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeProfile()">Annuler</button><button class="btn" onclick="App.saveProfile()">Enregistrer</button></div>'
+    + '</div></div>';
+}
+
+function renderReminderBanner() {
+  if (!reminderDue()) return '';
+  const left = Math.max(state.stats.goal - reviewedToday(), 0);
+  return '<div class="reminder-banner"><span class="reminder-ic">⏰</span><div style="flex:1;"><div class="mode-title">C\'est l\'heure de ta révision</div>'
+    + '<div class="mode-desc">Il te reste ' + left + ' carte(s) pour atteindre ton objectif du jour.</div></div>'
+    + '<button class="btn" onclick="App.startFlash(null,null,\'all-due\')">Réviser</button></div>';
+}
+
+// ---------- STATISTIQUES ----------
+function renderStats() {
+  const w = weekSummary();
+  const m = masteryBreakdown();
+  const lv = playerLevel();
+  const goal = state.stats.goal;
+  const maxBar = Math.max(goal, ...w.days.map(d => d.count), 1);
+  const totalCards = state.cards.length || 1;
+  let html = '<button class="backbtn" onclick="App.backHome()">‹ Accueil</button>';
+  html += '<div class="eyebrow">Progression</div><h1 class="title">Mes statistiques</h1>';
+  html += '<div class="subtitle">Niveau ' + lv.level + ' · ' + totalReviews() + ' cartes révisées au total.</div>';
+
+  html += '<div class="stat-card"><div class="mode-title">Cette semaine</div><div class="mode-desc">' + w.total + ' cartes · ' + w.activeDays + ' jour(s) actif(s) sur 7 · moyenne ' + w.average + ' par jour</div>'
+    + '<div class="bar-chart">' + w.days.map(function (d) {
+      const h = Math.round(d.count / maxBar * 100);
+      return '<div class="bar-col"><span class="bar-val">' + (d.count || '') + '</span><div class="bar-track"><div class="bar' + (d.count >= goal ? ' hit' : '') + '" style="height:' + h + '%;"></div></div><span class="bar-lbl' + (d.isToday ? ' today' : '') + '">' + d.letter + '</span></div>';
+    }).join('') + '</div><div class="rub-meta" style="margin-top:8px;">Barre verte : objectif de ' + goal + ' cartes atteint.</div></div>';
+
+  html += '<div class="stat-card"><div class="mode-title">Séries</div><div class="stats-grid">'
+    + '<div><div class="stat-num">' + currentStreak() + '</div><div class="rub-meta">en cours</div></div>'
+    + '<div><div class="stat-num">' + longestStreak() + '</div><div class="rub-meta">record</div></div>'
+    + '<div><div class="stat-num">' + (w.best.count || 0) + '</div><div class="rub-meta">meilleur jour</div></div></div></div>';
+
+  const seg = (n, cls, label) => '<div class="seg-row"><span class="seg-lbl">' + label + '</span><div class="seg-track"><div class="seg ' + cls + '" style="width:' + Math.round(n / totalCards * 100) + '%;"></div></div><span class="seg-n">' + n + '</span></div>';
+  html += '<div class="stat-card"><div class="mode-title">Maîtrise de tes ' + state.cards.length + ' cartes</div>'
+    + seg(m.fresh, 'fresh', 'À apprendre') + seg(m.learning, 'learning', 'En progrès') + seg(m.known, 'known', 'Maîtrisées') + '</div>';
+
+  const mp = state.multi;
+  html += '<div class="stat-card"><div class="mode-title">Multijoueur</div><div class="stats-grid">'
+    + '<div><div class="stat-num">' + mp.played + '</div><div class="rub-meta">duels</div></div>'
+    + '<div><div class="stat-num">' + mp.wins + '</div><div class="rub-meta">victoires</div></div>'
+    + '<div><div class="stat-num">' + (mp.played ? Math.round(mp.wins / mp.played * 100) + ' %' : '—') + '</div><div class="rub-meta">réussite</div></div></div></div>';
+  return html;
+}
+
+// ---------- DÉCOUVRIR (articles) ----------
+function renderDiscover() {
+  let html = '<button class="backbtn" onclick="App.backHome()">‹ Accueil</button>';
+  html += '<div class="eyebrow">Découvrir</div><h1 class="title">Mieux apprendre</h1>';
+  html += '<div class="subtitle">Quelques idées de la science de l\'apprentissage, derrière les fonctions de l\'appli. Contenu d\'exemple : à terme, une vraie lettre d\'information éditée.</div>';
+  ARTICLES.forEach(function (a, i) {
+    const open = state.openArticle === i;
+    html += '<div class="article' + (open ? ' open' : '') + '" onclick="App.toggleArticle(' + i + ')"><div class="row between"><div class="row" style="min-width:0;"><span class="settings-ic">' + a.emoji + '</span>'
+      + '<div style="min-width:0;"><div class="mode-title">' + esc(a.title) + '</div><div class="mode-desc">' + esc(a.summary) + '</div></div></div>'
+      + '<span class="chev">' + (open ? '⌃' : '⌄') + '</span></div>'
+      + (open ? '<div class="article-body">' + esc(a.body) + '<div class="rub-meta" style="margin-top:8px;">Lecture : ' + a.time + '</div></div>' : '') + '</div>';
+  });
   return html;
 }

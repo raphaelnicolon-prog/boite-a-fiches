@@ -247,3 +247,25 @@ export function demoDataset() {
     social: { friends: ['Léa'], pending: {} }
   };
 }
+
+// ---------- « Découvrir » : articles courts sur l'apprentissage (contenu d'exemple) ----------
+export const ARTICLES = [
+  { emoji: '⏳', title: 'La répétition espacée', time: '2 min',
+    summary: 'Revoir une information juste avant de l\'oublier la grave plus durablement.',
+    body: 'Dès 1885, Hermann Ebbinghaus a décrit la « courbe de l\'oubli » : sans révision, on perd vite une grande partie de ce qu\'on vient d\'apprendre. La répétition espacée consiste à revoir une information à des intervalles de plus en plus longs. C\'est le principe de la boîte de Leitner utilisée dans cette appli : une bonne réponse repousse le prochain rappel (1, 3, 7, 16 puis 30 jours), une mauvaise le ramène à zéro. Résultat : tu révises moins souvent ce que tu sais déjà, et davantage ce qui t\'échappe.' },
+  { emoji: '🧠', title: 'Se tester plutôt que relire', time: '2 min',
+    summary: 'Aller chercher une réponse en mémoire la renforce plus que la relecture.',
+    body: 'Relire son cours donne une impression de familiarité, pas la certitude de savoir. Des travaux comme ceux de Roediger et Karpicke (2006) montrent que se tester activement améliore la rétention à long terme : c\'est l\'« effet de test ». Les flashcards, le QCM et le texte à trous reposent tous sur ce mécanisme. Astuce : essaie de répondre avant de retourner la carte, même si tu hésites.' },
+  { emoji: '🌙', title: 'Le sommeil, allié de la mémoire', time: '2 min',
+    summary: 'Le cerveau consolide ce qu\'il a appris pendant la nuit.',
+    body: 'De nombreuses études suggèrent que le sommeil aide à consolider les souvenirs récents. Réviser en fin de journée, puis dormir, est donc un bon réflexe. À l\'inverse, enchaîner une nuit blanche avant un examen est rarement payant : la fatigue dégrade l\'attention et la récupération des informations.' },
+  { emoji: '🎲', title: 'Mélanger pour mieux retenir', time: '2 min',
+    summary: 'Alterner les thèmes et les types d\'exercices rend l\'apprentissage plus durable.',
+    body: 'L\'« entrelacement » consiste à mélanger des sujets ou des formats au lieu de tout travailler par blocs. La séance semble plus difficile, mais la mémoire à long terme est souvent meilleure. C\'est la logique du Quizz Medley : QCM, vrai/faux, phrases à trous et appariement s\'enchaînent pour solliciter ta mémoire de plusieurs façons.' },
+  { emoji: '🗣️', title: 'La méthode Feynman', time: '2 min',
+    summary: 'Expliquer simplement une notion révèle ce qu\'on n\'a pas compris.',
+    body: 'Le principe attribué au physicien Richard Feynman : explique une notion comme à quelqu\'un qui n\'y connaît rien. Là où tu butes, il y a un trou dans ta compréhension. Retourne au cours, comble-le, puis recommence. Les phrases à trous et la lecture audio des mots peuvent t\'aider à passer de la reconnaissance à la production.' },
+  { emoji: '👉', title: 'Les nudges : de petits coups de pouce', time: '2 min',
+    summary: 'Orienter un comportement sans rien interdire, c\'est la théorie du « nudge ».',
+    body: 'Popularisé par Thaler et Sunstein (Nudge, 2008), le nudge oriente un choix par un petit changement de contexte, sans contrainte : option par défaut, rappel, preuve sociale, progression visible. Ici : la série de jours, l\'objectif quotidien, le rappel à l\'heure choisie ou la ligue entre amis sont des nudges. Bien conçus, ils aident à tenir une habitude ; mal utilisés, ils peuvent devenir manipulateurs, d\'où l\'importance de rester transparent et de ne jamais culpabiliser.' }
+];

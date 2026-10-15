@@ -237,7 +237,7 @@ function endMatch() {
 export function leagueTable() {
   ensureWeek();
   const rows = LEAGUE_BOTS.map(b => ({ name: b.name, points: b.points, me: false }));
-  rows.push({ name: 'Toi', points: state.multi.weekPoints, me: true });
+  rows.push({ name: state.profile.pseudo, points: state.multi.weekPoints, me: true });
   rows.sort((a, b) => b.points - a.points || (a.me ? -1 : b.me ? 1 : 0));
   return rows;
 }

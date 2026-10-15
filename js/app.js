@@ -200,7 +200,7 @@ window.App = {
         const d = demoDataset();
         state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
         state.stats = d.stats; state.multi = d.multi; state.social = d.social;
-        state.meta = { premium: false, aiDays: {}, aiTotal: 0 };
+        state.meta = { premium: false, aiDays: {}, aiTotal: 0, reminder: state.meta.reminder };
         state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
         persist(); refresh();
       }
@@ -365,6 +365,30 @@ window.App = {
   openSettings() { state.view = 'settings'; refresh(); },
   openTrash() { state.view = 'trash'; refresh(); },
   openPitch() { state.view = 'pitch'; refresh(); },
+  openStats() { state.view = 'stats'; refresh(); },
+  openDiscover() { state.view = 'discover'; state.openArticle = null; refresh(); },
+  toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
+
+  // ---- Profil ----
+  openProfile() { state.showProfile = true; refresh(); },
+  saveProfile() {
+    const pseudo = document.getElementById('profile-pseudo').value.trim();
+    const avatar = document.getElementById('profile-avatar').value.trim();
+    if (pseudo.length < 2 || pseudo.length > 16) { askConfirm({ title: 'Pseudo trop court ou trop long', body: 'Choisis un pseudo de 2 à 16 caractères.', label: '' }); return; }
+    state.profile = { pseudo, avatar: avatar && avatar.length <= 8 ? avatar : '🙂' };
+    state.showProfile = false;
+    persist(); refresh();
+  },
+  closeProfile() { state.showProfile = false; refresh(); },
+
+  // ---- Rappel quotidien (bannière sur l'accueil, pas de notification push sans serveur) ----
+  toggleReminder() {
+    state.meta.reminder.on = !state.meta.reminder.on;
+    persist(); refresh();
+  },
+  setReminderTime(v) {
+    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) { state.meta.reminder.time = v; persist(); }
+  },
   restoreFromTrash(id) {
     const t = state.trash.find(x => x.id === id);
     if (!t) return;

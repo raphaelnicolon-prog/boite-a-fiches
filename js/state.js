@@ -51,7 +51,10 @@ export const state = {
   showBulk: false,
   trash: [],            // éléments supprimés récemment (voir app.js : corbeille de 30 jours)
   stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
-  meta: { premium: false, aiDays: {}, aiTotal: 0 }, // abonnement (démo) et générations IA utilisées par jour
+  meta: { premium: false, aiDays: {}, aiTotal: 0, reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
+  profile: { pseudo: 'Toi', avatar: '🙂' }, // pseudo et avatar affichés dans les duels et le classement
+  showProfile: false,
+  openArticle: null,       // article ouvert dans « Découvrir »
   multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 }, // points de ligue du joueur
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
@@ -292,4 +295,34 @@ export function badgeList() {
     { emoji: '🏆', label: 'Première victoire', earned: state.multi.wins >= 1 },
     { emoji: '👥', label: 'Premier ami', earned: state.social.friends.length >= 1 }
   ];
+}
+
+// ---------- Statistiques et rappel ----------
+// Résumé des 7 derniers jours pour l'écran de statistiques.
+export function weekSummary() {
+  const days = last7Days();
+  const total = days.reduce((a, d) => a + d.count, 0);
+  const best = days.reduce((a, d) => (d.count > a.count ? d : a), days[0]);
+  return { days, total, average: Math.round(total / 7 * 10) / 10, best, activeDays: days.filter(d => d.count > 0).length };
+}
+
+// Répartition des cartes selon le niveau de maîtrise (cases de Leitner).
+export function masteryBreakdown() {
+  const out = { fresh: 0, learning: 0, known: 0 };
+  state.cards.forEach(function (c) {
+    if (c.box === 0) out.fresh++;
+    else if (c.box <= 2) out.learning++;
+    else out.known++;
+  });
+  return out;
+}
+
+// Vrai quand le rappel est activé, que l'heure choisie est passée et que
+// l'objectif du jour n'est pas encore atteint : l'accueil affiche alors un coup de pouce.
+export function reminderDue() {
+  const r = state.meta.reminder;
+  if (!r || !r.on) return false;
+  const now = new Date();
+  const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  return hhmm >= r.time && reviewedToday() < state.stats.goal;
 }

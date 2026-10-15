@@ -26,9 +26,13 @@ export function sanitizeStats(raw) {
 }
 
 export function sanitizeMeta(raw) {
-  const m = { premium: false, aiDays: {}, aiTotal: 0 };
+  const m = { premium: false, aiDays: {}, aiTotal: 0, reminder: { on: false, time: '18:00' } };
   if (!raw || typeof raw !== 'object') return m;
   m.premium = raw.premium === true;
+  if (raw.reminder && typeof raw.reminder === 'object') {
+    m.reminder.on = raw.reminder.on === true;
+    if (typeof raw.reminder.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.reminder.time)) m.reminder.time = raw.reminder.time;
+  }
   if (Number.isInteger(raw.aiTotal) && raw.aiTotal >= 0) m.aiTotal = raw.aiTotal;
   if (raw.aiDays && typeof raw.aiDays === 'object') {
     Object.keys(raw.aiDays).sort().slice(-30).forEach(function (k) {
@@ -36,6 +40,13 @@ export function sanitizeMeta(raw) {
     });
   }
   return m;
+}
+export function sanitizeProfile(raw) {
+  const p = { pseudo: 'Toi', avatar: '🙂' };
+  if (!raw || typeof raw !== 'object') return p;
+  if (typeof raw.pseudo === 'string' && raw.pseudo.trim().length >= 2 && raw.pseudo.trim().length <= 16) p.pseudo = raw.pseudo.trim();
+  if (typeof raw.avatar === 'string' && raw.avatar.trim().length > 0 && raw.avatar.trim().length <= 8) p.avatar = raw.avatar.trim();
+  return p;
 }
 export function sanitizeMulti(raw) {
   const m = { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 };
@@ -69,6 +80,7 @@ export function loadData() {
         state.meta = sanitizeMeta(p.meta);
         state.multi = sanitizeMulti(p.multi);
         state.social = sanitizeSocial(p.social);
+        state.profile = sanitizeProfile(p.profile);
         return;
       }
     }
@@ -84,6 +96,7 @@ export function loadData() {
   state.meta = sanitizeMeta(null);
   state.multi = sanitizeMulti(null);
   state.social = sanitizeSocial(null);
+  state.profile = sanitizeProfile(null);
   persist();
 }
 
@@ -97,6 +110,7 @@ export function persist() {
       stats: state.stats,
       meta: state.meta,
       multi: state.multi,
+      profile: state.profile,
       social: { friends: state.social.friends }
     }));
   } catch (e) {
