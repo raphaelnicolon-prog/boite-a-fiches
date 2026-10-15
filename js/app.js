@@ -4,7 +4,7 @@
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION } from './state.js';
-import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT } from './demo.js';
+import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render, friendResultsHtml } from './render.js';
@@ -65,6 +65,19 @@ function prepareCurrentCard(s) {
 }
 
 const AI_TOPICS_LIST = AI_TOPICS;
+
+// Texte à trous sur une fiche de cours : retaper une définition entière à l'identique est
+// irréaliste. Pour les cartes dont le verso est une phrase assez longue et qui n'ont pas
+// encore de phrase à trous, on en fabrique une (mot clé masqué ; l'indice est la question).
+function ensureAutoCloze(cards) {
+  let changed = false;
+  cards.forEach(function (c) {
+    if (c.cloze || c.back.length < 25 || c.back.split(/\s+/).length < 5) return;
+    const cz = makeCloze(c.back);
+    if (cz) { c.cloze = { text: cz.text, answer: cz.answer, hint: c.front, auto: true }; changed = true; }
+  });
+  if (changed) persist();
+}
 
 // Boîte de confirmation à l'écran (remplace confirm() du navigateur, trop
 // discret et parfois absent sur téléphone). Sans 'label' : simple message + OK.
@@ -381,7 +394,7 @@ window.App = {
     if (state.editingCardId) {
       // On ne touche qu'au texte : le niveau de maîtrise (box) et la date de rappel restent.
       const c = state.cards.find(x => x.id === state.editingCardId);
-      if (c) { c.front = front; c.back = back; }
+      if (c) { c.front = front; c.back = back; if (c.cloze && c.cloze.auto) delete c.cloze; }
     } else {
       state.cards.push({ id: 'c-' + Date.now(), deckId: state.currentDeckId, front, back, box: 0, nextReview: todayStr() });
     }
@@ -638,6 +651,7 @@ window.App = {
   startMode(mode, deckId) {
     const deck = state.decks.find(d => d.id === deckId);
     const pool = shuffle(dueCards(deckId).length ? dueCards(deckId) : cardsOf(deckId));
+    if (mode === 'texte') ensureAutoCloze(pool);
     let s;
     if (mode === 'appariement') {
       const batches = splitBatches(pool, 6);
@@ -657,6 +671,7 @@ window.App = {
   startMedley(deckId, scope) {
     const deck = state.decks.find(d => d.id === deckId);
     const pool = shuffle(scope === 'due' ? (dueCards(deckId).length ? dueCards(deckId) : cardsOf(deckId)) : cardsOf(deckId));
+    ensureAutoCloze(pool);
     const s = { mode: 'medley', deckId, deckName: deck.name, reviewedCount: 0, index: 0, scope };
     if (pool.length >= 4) {
       const batch = pool.slice(0, Math.min(6, pool.length));

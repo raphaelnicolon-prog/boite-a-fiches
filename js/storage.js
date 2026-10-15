@@ -181,7 +181,10 @@ export function parseBackup(text) {
   p.cards.forEach(function (c) {
     if (!c || !isId(c.id) || !deckIds.has(c.deckId) || !isStr(c.front) || !isStr(c.back) || !c.front.trim() || !c.back.trim() || cardIds.has(c.id)) return;
     cardIds.add(c.id);
-    const cz = c.cloze && isStr(c.cloze.text) && isStr(c.cloze.answer) && c.cloze.text.includes('____') ? { text: c.cloze.text.slice(0, 300), answer: c.cloze.answer.slice(0, 100) } : null;
+    const cz = c.cloze && isStr(c.cloze.text) && isStr(c.cloze.answer) && c.cloze.text.includes('____')
+      ? Object.assign({ text: c.cloze.text.slice(0, 300), answer: c.cloze.answer.slice(0, 100) },
+        isStr(c.cloze.hint) ? { hint: c.cloze.hint.slice(0, 300) } : {}, c.cloze.auto === true ? { auto: true } : {})
+      : null;
     cards.push({
       id: c.id,
       deckId: c.deckId,

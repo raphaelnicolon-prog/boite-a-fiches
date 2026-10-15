@@ -212,7 +212,7 @@ function renderRubrique() {
     html += '<div class="deck-card" onclick="App.openDeck(\'' + d.id + '\')" style="cursor:pointer;">'
       + '<div class="deck-top" style="background:' + colorVar(r.color) + ';"></div>'
       + '<div class="row between"><div><div class="rub-name">' + esc(d.name) + '</div>'
-      + '<div class="rub-meta">' + (total === 0 ? 'vide' : (due + ' / ' + total + ' à revoir')) + '</div></div>'
+      + '<div class="rub-meta">' + (total === 0 ? 'vide' : (due + ' / ' + total + ' à revoir · maîtrise ' + deckMastery(d.id) + ' %')) + '</div></div>'
       + '<div class="row">'
       + '<button class="hidebtn" onclick="event.stopPropagation();App.openEditDeck(\'' + d.id + '\')">modifier</button>'
       + '<button class="hidebtn" onclick="event.stopPropagation();App.deleteDeck(\'' + d.id + '\')">supprimer</button>'
@@ -343,7 +343,7 @@ function renderTexte() {
   const card = s.queue[s.index];
   return '<div class="center">' + sessionHeader()
     + '<div class="qtext">' + esc(card.cloze ? card.cloze.text : card.front) + '</div>'
-    + (card.cloze ? '<div class="hint" style="margin:-8px 0 4px;">Indice : ' + esc(card.back) + '</div>' : '')
+    + (card.cloze ? '<div class="hint" style="margin:-8px 0 4px;">' + (card.cloze.hint ? 'Question : ' : 'Indice : ') + esc(card.cloze.hint || card.back) + '</div>' : '')
     + speakButton(card)
     + (!s.texteRevealed
       ? '<input class="answer-input" id="texte-input" placeholder="Ta réponse" value="' + esc(s.texteInput || '') + '" oninput="App.setTexteInput(this.value)" autocomplete="off" autocapitalize="off" spellcheck="false"/>'
@@ -935,4 +935,11 @@ function renderFeedbackModal() {
     + '</div><label>Un commentaire (facultatif)</label><textarea id="fb-text" placeholder="Ce que j\'aime, ce qui manque, ce qui bug…"></textarea>'
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeFeedback()">Annuler</button><button class="btn" onclick="App.sendFeedback()">Envoyer</button></div>'
     + '</div></div>';
+}
+
+// Maîtrise d'un paquet en % : moyenne des cases de Leitner (0 à 5) de ses cartes.
+function deckMastery(deckId) {
+  const cards = cardsOf(deckId);
+  if (cards.length === 0) return 0;
+  return Math.round(cards.reduce((a, c) => a + Math.min(c.box, 5), 0) / (cards.length * 5) * 100);
 }

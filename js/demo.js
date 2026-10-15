@@ -282,7 +282,7 @@ function lowerFirst(txt) {
   return GRAM_ARTICLES.includes(first) || GRAM_ARTICLES.includes(first + '\'') ? txt.charAt(0).toLowerCase() + txt.slice(1) : txt;
 }
 
-function makeCloze(sentence) {
+export function makeCloze(sentence) {
   const clean = sentence.replace(/\s+/g, ' ').trim();
   if (clean.length > 220) return null;
   const words = clean.match(/[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]{5,}/g) || [];
