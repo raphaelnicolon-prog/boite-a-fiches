@@ -639,7 +639,8 @@ function renderDuel() {
   const q = d.q;
   const qu = d.questions[d.index];
   const revealed = d.phase === 'reveal';
-  const opts = qu.options.map(function (o, i) {
+  const isMatch = qu.type === 'match';
+  const opts = isMatch ? '' : qu.options.map(function (o, i) {
     let cls = 'opt';
     if (revealed) cls += i === qu.correct ? ' correct' : (i === q.meIdx ? ' wrong' : ' dim');
     else if (q.meIdx === i) cls += ' picked';
@@ -653,9 +654,9 @@ function renderDuel() {
     + '<div class="duel-side"><span class="duel-name">' + esc(opp.name) + '</span><span class="duel-score" id="duel-score-opp">' + d.opp.score + '</span></div></div>'
     + '<div class="goal-bar"><div class="goal-fill" id="duel-timer-fill" style="transition:none;width:' + Math.max(0, q.timeLeft / q.time * 100) + '%;"></div></div>'
     + '<div class="center"><div class="eyebrow" style="margin-top:20px;">' + esc(qu.label) + '</div>'
-    + '<div class="qtext" style="margin-top:8px;">' + esc(qu.front) + '</div>'
+    + (qu.front ? '<div class="qtext" style="margin-top:8px;">' + esc(qu.front) + '</div>' : '')
     + (qu.sub ? '<div class="duel-sub">' + esc(qu.sub) + '</div>' : '')
-    + '<div class="opt-grid">' + opts + '</div>'
+    + (isMatch ? duelMatchHtml(d, qu, revealed) : '<div class="opt-grid">' + opts + '</div>')
     + '<div class="hint" id="duel-opp-status" style="margin-top:16px;">' + esc(status) + '</div></div>';
 }
 
@@ -861,4 +862,21 @@ function renderDiscover() {
       + (open ? '<div class="article-body">' + esc(a.body) + '<div class="rub-meta" style="margin-top:8px;">Lecture : ' + a.time + '</div></div>' : '') + '</div>';
   });
   return html;
+}
+
+// Colonnes de la manche d'appariement d'un duel.
+function duelMatchHtml(d, qu, revealed) {
+  const m = d.q.match;
+  const col = function (side, order, key) {
+    return '<div class="match-col">' + order.map(function (pairIdx, i) {
+      let cls = 'match-item';
+      if (m.done[pairIdx]) cls += ' matched';
+      else if ((side === 'L' ? m.selL : m.selR) === i) cls += ' sel';
+      if (m.wrong && (side === 'L' ? m.wrong.l : m.wrong.r) === i) cls += ' wrongflash';
+      const locked = m.done[pairIdx] || revealed || d.q.meAnswered;
+      return '<div class="' + cls + '" ' + (locked ? '' : 'onclick="App.duelPickMatch(\'' + side + '\',' + i + ')"') + '>' + esc(qu.pairs[pairIdx][key]) + '</div>';
+    }).join('') + '</div>';
+  };
+  return '<div class="match-wrap" style="margin-top:6px;">' + col('L', m.left, 'front') + col('R', m.right, 'back') + '</div>'
+    + '<div class="rub-meta" style="margin-top:10px;">' + m.count + ' / ' + qu.pairs.length + ' paires reliées</div>';
 }

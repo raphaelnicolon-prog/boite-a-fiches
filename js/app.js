@@ -5,7 +5,7 @@
 
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE } from './demo.js';
-import { startDuel, stopDuel, answer as duelAnswerFn, setRefresh } from './duel.js';
+import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render, friendResultsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
@@ -94,6 +94,7 @@ window.App = {
   setMultiMode(m) { state.multiMode = m; refresh(); },
   quickMatch() { state.view = 'duel'; startDuel(null); },
   duelAnswer(i) { duelAnswerFn(i); },
+  duelPickMatch(side, i) { pickMatch(side, i); },
   duelRematch() {
     const d = state.duel;
     if (!d) return;
