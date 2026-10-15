@@ -8,7 +8,7 @@ import {
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek
 } from './state.js';
 import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE } from './demo.js';
-import { leagueTable, QUESTIONS, TIME, POINTS } from './duel.js';
+import { leagueTable, POINTS, DUEL_MODES } from './duel.js';
 
 export function render() {
   const app = document.getElementById('app');
@@ -553,8 +553,11 @@ function renderMulti() {
     + '<div class="badge-row">' + badgeList().map(function (b) {
       return '<div class="badge-chip' + (b.earned ? ' on' : '') + '"><span>' + b.emoji + '</span><small>' + esc(b.label) + '</small></div>';
     }).join('') + '</div></div>';
+  const curMode = DUEL_MODES.find(x => x.id === state.multiMode) || DUEL_MODES[0];
+  html += '<div class="eyebrow" style="margin:6px 0 8px;">Format de partie</div><div class="chip-row" style="margin-bottom:12px;">'
+    + DUEL_MODES.map(function (x) { return '<button class="chip wide' + (x.id === curMode.id ? ' sel' : '') + '" onclick="App.setMultiMode(\'' + x.id + '\')">' + x.emoji + ' ' + x.label + '</button>'; }).join('') + '</div>';
   html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;" onclick="App.quickMatch()">'
-    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Un adversaire au hasard · 5 questions chronométrées</div></div><span class="chev">›</span></button>';
+    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Adversaire au hasard · ' + esc(curMode.desc) + '</div></div><span class="chev">›</span></button>';
   html += '<div class="mode-card" style="cursor:pointer;" onclick="App.openFriends()"><div><div class="mode-title">👥 Mes amis</div><div class="mode-desc">'
     + (state.social.friends.length ? state.social.friends.length + ' ami(s) · cherche un pseudo pour en ajouter' : 'Cherche un pseudo pour ajouter un ami') + '</div></div><span class="chev">›</span></div>';
   html += '<div class="mode-card" style="cursor:pointer;" onclick="App.openLeague()"><div><div class="mode-title">🏆 Classement</div><div class="mode-desc">Ligue de la semaine · se termine dans ' + daysLeftInWeek() + ' j</div></div><span class="chev">›</span></div>';
@@ -580,7 +583,7 @@ function renderDuel() {
   if (d.phase === 'found') {
     return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.kind === 'friend' ? opp.name + ' a accepté' : 'Adversaire trouvé') + '</div>'
       + avatar(opp.name, true) + '<h1 class="title" style="margin-top:14px;">' + esc(opp.name) + '</h1>'
-      + '<div class="subtitle">Niveau ' + opp.level + ' · en ligne · thème : ' + esc(d.deckName) + '</div><div class="spinner"></div>'
+      + '<div class="subtitle">Niveau ' + opp.level + ' · en ligne · ' + esc((DUEL_MODES.find(x => x.id === d.mode) || DUEL_MODES[0]).label) + ' · thème : ' + esc(d.deckName) + '</div><div class="spinner"></div>'
       + '<div class="hint">Le duel commence…</div></div>';
   }
   if (d.phase === 'end') {
@@ -612,8 +615,10 @@ function renderDuel() {
   return '<div class="duel-head"><div class="duel-side"><span class="duel-name">Toi</span><span class="duel-score" id="duel-score-me">' + d.me.score + '</span></div>'
     + '<div class="duel-mid">' + (d.index + 1) + ' / ' + d.questions.length + '<div class="duel-num" id="duel-timer-num">' + Math.ceil(Math.max(q.timeLeft, 0)) + '</div></div>'
     + '<div class="duel-side"><span class="duel-name">' + esc(opp.name) + '</span><span class="duel-score" id="duel-score-opp">' + d.opp.score + '</span></div></div>'
-    + '<div class="goal-bar"><div class="goal-fill" id="duel-timer-fill" style="transition:none;width:' + Math.max(0, q.timeLeft / TIME * 100) + '%;"></div></div>'
-    + '<div class="center"><div class="qtext" style="margin-top:24px;">' + esc(qu.front) + '</div>'
+    + '<div class="goal-bar"><div class="goal-fill" id="duel-timer-fill" style="transition:none;width:' + Math.max(0, q.timeLeft / q.time * 100) + '%;"></div></div>'
+    + '<div class="center"><div class="eyebrow" style="margin-top:20px;">' + esc(qu.label) + '</div>'
+    + '<div class="qtext" style="margin-top:8px;">' + esc(qu.front) + '</div>'
+    + (qu.sub ? '<div class="duel-sub">' + esc(qu.sub) + '</div>' : '')
     + '<div class="opt-grid">' + opts + '</div>'
     + '<div class="hint" id="duel-opp-status" style="margin-top:16px;">' + esc(status) + '</div></div>';
 }

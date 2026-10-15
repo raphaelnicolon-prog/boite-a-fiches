@@ -176,6 +176,7 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .duel-score { font-size: 26px; font-weight: 800; }
 .duel-mid { text-align: center; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
 .duel-num { font-size: 22px; font-weight: 800; color: var(--primary); }
+.duel-sub { font-size: 19px; font-weight: 800; color: var(--primary); margin: -8px 0 20px; max-width: 380px; }
 .duel-final { display: flex; align-items: center; gap: 22px; margin-top: 10px; }
 .duel-vs { color: var(--ink-soft); font-weight: 700; }
 .opt.picked { border-color: var(--primary); background: rgba(53, 205, 191, 0.16); }

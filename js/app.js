@@ -91,12 +91,13 @@ window.App = {
 
   // ---- Multijoueur (prototype : adversaires simulés, voir duel.js) ----
   openMulti() { stopDuel(); state.view = 'multi'; refresh(); },
+  setMultiMode(m) { state.multiMode = m; refresh(); },
   quickMatch() { state.view = 'duel'; startDuel(null); },
   duelAnswer(i) { duelAnswerFn(i); },
   duelRematch() {
     const d = state.duel;
     if (!d) return;
-    startDuel({ opponent: d.opponent, deckId: d.deckId, skipSearch: true });
+    startDuel({ opponent: d.opponent, deckId: d.deckId, mode: d.mode, skipSearch: true });
   },
   openLeague() { stopDuel(); state.view = 'league'; refresh(); },
   openFriends() { stopDuel(); state.view = 'friends'; state.friendQuery = ''; refresh(); },

@@ -55,6 +55,7 @@ export const state = {
   multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 }, // points de ligue du joueur
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
+  multiMode: 'medley',  // format des duels : 'medley', 'qcm' ou 'vf'
   ai: null,             // assistant IA en cours (formulaire, chargement, relecture)
   duel: null,           // partie multijoueur en cours (voir duel.js)
   showPaywall: false,
