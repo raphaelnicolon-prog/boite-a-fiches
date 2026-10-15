@@ -3,7 +3,7 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
@@ -497,7 +497,8 @@ window.App = {
     const t = document.getElementById('fb-text');
     const comment = t ? t.value.trim() : '';
     if (!state.feedbackRating && !comment) { askConfirm({ title: 'Rien à envoyer', body: 'Choisis une humeur ou écris un commentaire.', label: '' }); return; }
-    const text = 'Avis Boîte à Fiches (v' + APP_VERSION + ')\nRessenti : ' + (state.feedbackRating ? state.feedbackRating + '/4' : 'non précisé') + '\n' + (comment || '(pas de commentaire)');
+    const usage = totalReviewsCount() + ' cartes révisées, record de série ' + longestStreakCount() + ' j, ' + state.multi.played + ' duel(s)';
+    const text = 'Avis Boîte à Fiches (v' + APP_VERSION + ')\nRessenti : ' + (state.feedbackRating ? state.feedbackRating + '/4' : 'non précisé') + '\nUsage : ' + usage + '\n' + (comment || '(pas de commentaire)');
     state.showFeedback = false;
     try {
       if (navigator.share) { await navigator.share({ title: 'Avis Boîte à Fiches', text }); refresh(); return; }
@@ -596,7 +597,37 @@ window.App = {
     window.speechSynthesis.speak(u);
   },
 
+  // ---- Partage d'un paquet ----
+  // Texte « recto ; verso » collable dans « Ajouter plusieurs cartes » chez un camarade.
+  async shareDeck() {
+    const d = state.decks.find(x => x.id === state.currentDeckId);
+    if (!d) return;
+    const lines = cardsOf(d.id).map(c => c.front.replace(/[\r\n;]+/g, ' ') + ' ; ' + c.back.replace(/[\r\n]+/g, ' '));
+    const text = 'Paquet « ' + d.name + ' » — Boîte à Fiches\n(à coller dans « Ajouter plusieurs cartes »)\n\n' + lines.join('\n');
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Paquet ' + d.name, text }); return; }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      askConfirm({ title: 'Paquet copié', body: lines.length + ' carte(s) copiées. Colle-les dans un message à ton camarade.', label: '' });
+    } catch (e) {
+      askConfirm({ title: 'Copie impossible', body: 'Ton navigateur n\'autorise pas la copie automatique.', label: '' });
+    }
+  },
+
   // ---- Ajout de plusieurs cartes d'un coup ----
+  loadBulkFile(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 300000) { askConfirm({ title: 'Fichier trop volumineux', body: 'Choisis un fichier de moins de 300 Ko.', label: '' }); return; }
+    file.text().then(txt => {
+      input.value = '';
+      const ta = document.getElementById('bulk-text');
+      if (ta) { ta.value = txt; this.previewBulk(txt); }
+    });
+  },
   openBulk() { state.showBulk = true; refresh(); },
   // Pas de refresh() ici : il effacerait le texte en cours de saisie.
   previewBulk(text) {

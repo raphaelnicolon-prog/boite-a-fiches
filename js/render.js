@@ -262,8 +262,9 @@ function renderCards() {
   const cards = cardsOf(d.id);
   let html = '<button class="backbtn" onclick="App.openDeck(\'' + d.id + '\')">‹ ' + esc(d.name) + '</button>';
   html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Tes cartes</h1>';
-  html += '<div class="row between" style="margin-bottom:18px;"><div class="subtitle" style="margin:0;">' + cards.length + ' carte(s)</div>'
+  html += '<div class="row between" style="margin-bottom:10px;"><div class="subtitle" style="margin:0;">' + cards.length + ' carte(s)</div>'
     + '<button class="toggle-reorder" onclick="App.openBulk()">Ajouter plusieurs cartes</button></div>';
+  if (cards.length) html += '<div style="margin-bottom:16px;"><button class="link" onclick="App.shareDeck()">📤 Partager ce paquet avec un camarade</button></div>';
   if (cards.length === 0) html += '<div class="subtitle">Aucune carte pour l\'instant — ajoute-en avec le bouton + ou colle-en plusieurs d\'un coup.</div>';
   cards.forEach(function (c) {
     html += '<div class="list-item"><div class="row between" style="align-items:flex-start;">'
@@ -441,7 +442,7 @@ function renderBulkModal() {
   return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeModals()"><div class="modal">'
     + '<div class="eyebrow">Ajouter plusieurs cartes</div>'
     + '<div class="rub-meta" style="margin-top:8px;">Une carte par ligne, sous la forme <b>recto ; verso</b>. Tu peux aussi coller directement deux colonnes copiées depuis Excel ou Google Sheets.</div>'
-    + '<label>Tes cartes</label><textarea id="bulk-text" style="min-height:150px;" placeholder="Buongiorno ; Bonjour&#10;Grazie mille ; Merci beaucoup&#10;Arrivederci ; Au revoir" oninput="App.previewBulk(this.value)"></textarea>'
+    + '<label>Tes cartes</label><label class="link file-link">Importer un fichier .csv ou .txt<input type="file" accept=".csv,.tsv,.txt,text/plain,text/csv" style="display:none;" onchange="App.loadBulkFile(this)"/></label><textarea id="bulk-text" style="min-height:150px;" placeholder="Buongiorno ; Bonjour&#10;Grazie mille ; Merci beaucoup&#10;Arrivederci ; Au revoir" oninput="App.previewBulk(this.value)"></textarea>'
     + '<div class="rub-meta" id="bulk-preview" style="margin-top:8px;">Rien à ajouter pour l\'instant.</div>'
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveBulk()">Ajouter</button></div>'
     + '</div></div>';
@@ -762,7 +763,8 @@ function renderPitch() {
     'Un <b>moteur de révision unique</b> pour deux usages : cours et langues.',
     '5 modes (flashcard, QCM, texte à trous, appariement, Medley) et un seul score de maîtrise par carte.',
     'Rappels espacés (méthode Leitner) : l\'appli te dit quoi réviser aujourd\'hui.',
-    '<b>Contenu créé en une phrase par l\'IA</b>, relu par l\'utilisateur avant ajout.'
+    '<b>Contenu créé en une phrase par l\'IA</b>, ou à partir d\'un texte de cours, relu par l\'utilisateur avant ajout.',
+    'Partage d\'un paquet avec un camarade en un geste : levier de croissance par le bouche-à-oreille.'
   ]));
 
   html += pitchSection('3', 'Modèle économique : freemium',
@@ -785,7 +787,8 @@ function renderPitch() {
 
   html += pitchSection('5', 'Rétention : les « nudges »', pitchList([
     '<b>Série de jours</b> et objectif quotidien avec barre de progression.',
-    '<b>Preuve sociale</b> : amis, duels et ligue hebdomadaire.',
+    '<b>Preuve sociale</b> : amis, duels, ligue hebdomadaire avec classements général, promo et amis.',
+    '<b>Défi du jour</b> : un rendez-vous quotidien, avec points bonus une fois par jour.',
     '<b>Récompenses</b> : points, niveaux, badges, « le saviez-vous ? » quotidien.',
     '<b>Par défaut utile</b> : la répétition espacée décide des cartes du jour à ta place.',
     'À venir : rappel à l\'heure habituelle de révision.',
