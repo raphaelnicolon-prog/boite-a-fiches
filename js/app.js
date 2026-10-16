@@ -3,9 +3,9 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
-import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
+import { eligibleDecks, startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
 import { render, friendResultsHtml, searchResultsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
@@ -14,6 +14,18 @@ function refresh() {
   render();
   const list = document.getElementById('rubrique-list');
   if (list) enableReorder(list, applyReorder);
+  const decks = document.getElementById('deck-list');
+  if (decks) enableReorder(decks, applyDeckReorder);
+}
+
+// Après un glisser-déposer de paquets : on numérote les paquets de cette liste dans le nouvel ordre.
+function applyDeckReorder(idsInOrder) {
+  idsInOrder.forEach((id, i) => {
+    const d = state.decks.find(x => x.id === id);
+    if (d) d.order = i;
+  });
+  persist();
+  refresh();
 }
 
 function applyReorder(idsInOrder) {
@@ -29,7 +41,7 @@ function applyReorder(idsInOrder) {
 // dans le même paquet, ou dans la même rubrique si le paquet est trop petit.
 function buildQcmOptions(card) {
   const deck = state.decks.find(d => d.id === card.deckId);
-  let pool = state.cards.filter(c => c.deckId === card.deckId && c.id !== card.id);
+  let pool = treeCards(rootDeckId(card.deckId)).filter(c => c.id !== card.id);
   if (pool.length < 3 && deck) {
     pool = state.cards.filter(c => {
       const cardDeck = state.decks.find(x => x.id === c.deckId);
@@ -112,18 +124,32 @@ function sendToTrash(type, name, payload) {
   });
 }
 
-// Range une carte dans une section (valeur du menu déroulant) ; '' ou inconnue = « sans section ».
-function setCardFolder(card, value) {
-  if (value === undefined) return;
-  const d = state.decks.find(x => x.id === card.deckId);
-  if (value && d && (d.folders || []).some(f => f.id === value)) card.folderId = value;
-  else delete card.folderId;
+// Modes à une carte à la fois cochés pour le Medley (l'appariement est géré à part).
+function medleySingles() {
+  return state.medleyModes.filter(m => m !== 'appariement');
+}
+
+// Déplace un paquet : 'R:idRubrique' = à la racine de cette rubrique, 'D:idPaquet' = dans ce paquet.
+// Un paquet ne peut pas aller dans lui-même ni dans un de ses sous-paquets.
+function moveDeck(d, value) {
+  let rid, parentId = null;
+  if (value.indexOf('R:') === 0) rid = value.slice(2);
+  else if (value.indexOf('D:') === 0) {
+    const target = state.decks.find(x => x.id === value.slice(2));
+    if (!target || descendantIds(d.id).includes(target.id)) return;
+    rid = target.rubriqueId; parentId = target.id;
+  } else return;
+  if (!state.rubriques.some(r => r.id === rid)) return;
+  if ((d.parentId || null) === parentId && d.rubriqueId === rid) return;
+  descendantIds(d.id).forEach(id => { const x = state.decks.find(y => y.id === id); if (x) x.rubriqueId = rid; });
+  if (parentId) d.parentId = parentId; else delete d.parentId;
+  d.order = nextDeckOrder(rid, parentId);
 }
 
 // Écarte les cartes dont le recto existe déjà dans le paquet courant : on peut
 // ré-importer une liste mise à jour chaque semaine sans doublons.
 function newBulkCards(cards) {
-  const have = new Set(cardsOf(state.currentDeckId).map(c => normalize(c.front)));
+  const have = new Set(treeCards(state.currentDeckId).map(c => normalize(c.front)));
   return cards.filter(c => { const k = normalize(c.front); if (have.has(k)) return false; have.add(k); return true; });
 }
 
@@ -137,8 +163,6 @@ window.App = {
 
   // ---- Multijoueur (prototype : adversaires simulés, voir duel.js) ----
   openMulti() { stopDuel(); state.view = 'multi'; refresh(); },
-  setMultiMode(m) { state.multiMode = m; refresh(); },
-  setMultiDeck(id) { state.multiDeckId = id; refresh(); },
   quickMatch() { state.view = 'duel'; startDuel(null); },
   duelAnswer(i) { duelAnswerFn(i); },
   duelPickMatch(side, i) { pickMatch(side, i); },
@@ -271,12 +295,11 @@ window.App = {
     const existing = a.targetDeckId !== 'new' ? state.decks.find(d => d.id === a.targetDeckId && d.rubriqueId === a.rubriqueId) : null;
     const deckId = existing ? existing.id : 'd-' + stamp;
     if (existing) { if (!existing.speakLang && res.speakLang) existing.speakLang = res.speakLang; }
-    else state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang });
+    else state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang, order: nextDeckOrder(a.rubriqueId, null) });
     a.selected.slice().sort((x, y) => x - y).forEach((i, k) => {
       const c = res.cards[i];
       const nc = Object.assign({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() },
         c.cloze ? { cloze: { text: c.cloze.text, answer: c.cloze.answer } } : {});
-      if (existing) setCardFolder(nc, state.deckScope[deckId]);
       state.cards.push(nc);
     });
     state.currentRubriqueId = a.rubriqueId;
@@ -320,12 +343,22 @@ window.App = {
   toggleReorder() { state.reorderMode = !state.reorderMode; refresh(); },
   hideRubrique(id) { const r = state.rubriques.find(x => x.id === id); if (r) { r.hidden = true; persist(); refresh(); } },
   showRubrique(id) { const r = state.rubriques.find(x => x.id === id); if (r) { r.hidden = false; persist(); refresh(); } },
-  openRubrique(id) { state.currentRubriqueId = id; state.view = 'rubrique'; refresh(); },
-  openDeck(id) { state.currentDeckId = id; state.view = 'modes'; refresh(); },
-  backHome() { stopDuel(); state.view = 'home'; state.session = null; refresh(); },
+  openRubrique(id) { state.currentRubriqueId = id; state.view = 'rubrique'; state.reorderMode = false; state.dropOpen = null; refresh(); window.scrollTo(0, 0); },
+  openDeck(id) {
+    const d = state.decks.find(x => x.id === id);
+    if (d) state.currentRubriqueId = d.rubriqueId;
+    state.currentDeckId = id; state.view = 'modes'; state.reorderMode = false; state.dropOpen = null; refresh(); window.scrollTo(0, 0);
+  },
+  // Retour : vers le paquet parent s'il y en a un, sinon vers la rubrique.
+  backFromDeck() {
+    const d = state.decks.find(x => x.id === state.currentDeckId);
+    if (d && d.parentId) this.openDeck(d.parentId); else this.openRubrique(d ? d.rubriqueId : state.currentRubriqueId);
+  },
+  backHome() { stopDuel(); state.dropOpen = null; state.view = 'home'; state.session = null; refresh(); },
 
   // ---- Barre d'onglets ----
   goTab(tab) {
+    state.dropOpen = null;
     stopDuel();
     state.session = null;
     const roots = { learn: 'home', play: 'multi', create: 'create', progress: 'stats', profile: 'settings' };
@@ -417,8 +450,10 @@ window.App = {
     });
   },
 
-  // ---- Paquets (création, modification, suppression) ----
-  openAddDeck() { state.editingDeckId = null; state.showAddDeck = true; refresh(); },
+  // ---- Paquets (création, modification, déplacement, suppression) ----
+  openAddDeck() { state.editingDeckId = null; state.newDeckParentId = null; state.showAddDeck = true; refresh(); },
+  // Nouveau paquet DANS le paquet affiché (comme créer un dossier dans un dossier).
+  openAddSubDeck() { state.editingDeckId = null; state.newDeckParentId = state.currentDeckId; state.showAddDeck = true; refresh(); },
   openEditDeck(id) {
     if (!state.decks.find(x => x.id === id)) return;
     state.editingDeckId = id;
@@ -428,32 +463,86 @@ window.App = {
   saveDeck() {
     const name = document.getElementById('deck-name').value.trim();
     if (!name) return;
+    const lang = document.getElementById('deck-lang').value;
     if (state.editingDeckId) {
       const d = state.decks.find(x => x.id === state.editingDeckId);
-      if (d) { d.name = name; d.speakLang = document.getElementById('deck-lang').value; }
+      if (d) {
+        d.name = name; d.speakLang = lang;
+        // « Emplacement » : valeur 'R:idRubrique' (racine d'une rubrique) ou 'D:idPaquet' (dans ce paquet).
+        const loc = document.getElementById('deck-loc');
+        if (loc && loc.value) moveDeck(d, loc.value);
+      }
     } else {
-      state.decks.push({ id: 'd-' + Date.now(), name, rubriqueId: state.currentRubriqueId, speakLang: document.getElementById('deck-lang').value });
+      const parent = state.newDeckParentId ? state.decks.find(x => x.id === state.newDeckParentId) : null;
+      const rid = parent ? parent.rubriqueId : state.currentRubriqueId;
+      const nd = Object.assign({ id: 'd-' + Date.now(), name, rubriqueId: rid, speakLang: lang, order: nextDeckOrder(rid, parent ? parent.id : null) },
+        parent ? { parentId: parent.id } : {});
+      state.decks.push(nd);
+      // Si une sélection personnalisée est active et que le parent est coché, le nouveau sous-paquet l'est aussi.
+      Object.keys(state.deckSel).forEach(k => { if (parent && state.deckSel[k].includes(parent.id)) state.deckSel[k].push(nd.id); });
     }
-    state.showAddDeck = false; state.showEditDeck = false; state.editingDeckId = null;
+    state.showAddDeck = false; state.showEditDeck = false; state.editingDeckId = null; state.newDeckParentId = null;
     persist(); refresh();
   },
   deleteDeck(id) {
     const d = state.decks.find(x => x.id === id);
     if (!d) return;
-    const cards = state.cards.filter(c => c.deckId === id);
-    const parent = state.rubriques.find(r => r.id === d.rubriqueId);
+    const ids = new Set(descendantIds(id));
+    const decks = state.decks.filter(x => ids.has(x.id));
+    const cards = state.cards.filter(c => ids.has(c.deckId));
+    const parent = d.parentId ? state.decks.find(x => x.id === d.parentId) : state.rubriques.find(r => r.id === d.rubriqueId);
     askConfirm({
       title: 'Supprimer le paquet ?',
-      body: '« ' + d.name + ' » et ses ' + cards.length + ' carte(s) iront dans « Supprimé récemment ». Tu pourras les récupérer pendant 30 jours.',
+      body: '« ' + d.name + ' »' + (decks.length > 1 ? ', ses ' + (decks.length - 1) + ' sous-paquet(s)' : '') + ' et ' + cards.length + ' carte(s) iront dans « Supprimé récemment ». Tu pourras les récupérer pendant 30 jours.',
       label: 'Supprimer', danger: true,
       onConfirm() {
-        sendToTrash('deck', d.name, { deck: d, cards, parentName: parent ? parent.name : '' });
-        state.decks = state.decks.filter(x => x.id !== id);
-        state.cards = state.cards.filter(c => c.deckId !== id);
+        sendToTrash('deck', d.name, { deck: d, decks: decks.filter(x => x.id !== id), cards, parentName: parent ? parent.name : '' });
+        state.decks = state.decks.filter(x => !ids.has(x.id));
+        state.cards = state.cards.filter(c => !ids.has(c.deckId));
+        if (ids.has(state.currentDeckId)) state.view = d.parentId ? 'modes' : 'rubrique', state.currentDeckId = d.parentId || null;
         persist(); refresh();
       }
     });
   },
+
+  // ---- Listes déroulantes à cocher ----
+  toggleDrop(key) { state.dropOpen = state.dropOpen === key ? null : key; refresh(); },
+  // Contenu à réviser dans un paquet : cocher un paquet qui a des sous-paquets coche/décoche tout son contenu.
+  toggleSel(deckId, nodeId) {
+    const all = descendantIds(deckId);
+    const cur = new Set(state.deckSel[deckId] || all);
+    const branch = descendantIds(nodeId);
+    const full = branch.every(id => cur.has(id));
+    branch.forEach(id => { if (full) cur.delete(id); else cur.add(id); });
+    if (cur.size === 0) return; // on garde toujours au moins une case cochée
+    state.deckSel[deckId] = cur.size === all.length ? undefined : all.filter(id => cur.has(id));
+    if (state.deckSel[deckId] === undefined) delete state.deckSel[deckId];
+    refresh();
+  },
+  selAll(deckId) { delete state.deckSel[deckId]; refresh(); },
+  toggleMedleyMode(m) {
+    const cur = new Set(state.medleyModes);
+    if (cur.has(m)) { if (cur.size === 1) return; cur.delete(m); } else cur.add(m);
+    state.medleyModes = ['flash', 'qcm', 'texte', 'appariement'].filter(x => cur.has(x));
+    refresh();
+  },
+  toggleMultiMode(m) {
+    const cur = new Set(state.multiModes);
+    if (cur.has(m)) { if (cur.size === 1) return; cur.delete(m); } else cur.add(m);
+    state.multiModes = ['medley', 'qcm', 'vf', 'match'].filter(x => cur.has(x));
+    refresh();
+  },
+  toggleMultiTheme(id) {
+    const ok = eligibleDecks().map(d => d.id);
+    const cur = new Set(state.multiThemes || ok);
+    const branch = descendantIds(id).filter(x => ok.includes(x));
+    const full = branch.every(x => cur.has(x));
+    branch.forEach(x => { if (full) cur.delete(x); else cur.add(x); });
+    if (cur.size === 0) return;
+    state.multiThemes = cur.size === ok.length ? null : ok.filter(x => cur.has(x));
+    refresh();
+  },
+  allMultiThemes() { state.multiThemes = null; refresh(); },
 
   // ---- Cartes ----
   openCards() { state.view = 'cards'; refresh(); },
@@ -467,17 +556,15 @@ window.App = {
   saveCard() {
     const front = document.getElementById('card-front').value.trim();
     const back = document.getElementById('card-back').value.trim();
-    const folderEl = document.getElementById('card-folder');
-    const folderSel = folderEl ? folderEl.value : undefined;
+    const deckEl = document.getElementById('card-deck');
+    const deckSel = deckEl && state.decks.some(d => d.id === deckEl.value) ? deckEl.value : null;
     if (!front || !back) return;
     if (state.editingCardId) {
       // On ne touche qu'au texte : le niveau de maîtrise (box) et la date de rappel restent.
       const c = state.cards.find(x => x.id === state.editingCardId);
-      if (c) { c.front = front; c.back = back; if (c.cloze && c.cloze.auto) delete c.cloze; setCardFolder(c, folderSel); }
+      if (c) { c.front = front; c.back = back; if (c.cloze && c.cloze.auto) delete c.cloze; if (deckSel) c.deckId = deckSel; }
     } else {
-      const nc = { id: 'c-' + Date.now(), deckId: state.currentDeckId, front, back, box: 0, nextReview: todayStr() };
-      setCardFolder(nc, folderSel);
-      state.cards.push(nc);
+      state.cards.push({ id: 'c-' + Date.now(), deckId: deckSel || state.currentDeckId, front, back, box: 0, nextReview: todayStr() });
     }
     state.showAddCard = false; state.showEditCard = false; state.editingCardId = null;
     persist(); refresh();
@@ -612,7 +699,9 @@ window.App = {
       p.cards.forEach(c => { if (!state.cards.some(x => x.id === c.id)) state.cards.push(c); });
     } else if (t.type === 'deck') {
       if (!state.rubriques.some(r => r.id === p.deck.rubriqueId)) { missingParent('rubrique', p.parentName); return; }
+      if (p.deck.parentId && !state.decks.some(x => x.id === p.deck.parentId)) delete p.deck.parentId; // le dossier parent n'existe plus : retour à la racine
       if (!state.decks.some(x => x.id === p.deck.id)) state.decks.push(p.deck);
+      (p.decks || []).forEach(d => { if (!state.decks.some(x => x.id === d.id)) state.decks.push(d); });
       p.cards.forEach(c => { if (!state.cards.some(x => x.id === c.id)) state.cards.push(c); });
     } else {
       if (!state.decks.some(d => d.id === p.card.deckId)) { missingParent('paquet', p.parentName); return; }
@@ -708,14 +797,12 @@ window.App = {
   },
   saveBulk() {
     const cards = newBulkCards(parseBulk(document.getElementById('bulk-text').value).cards);
-    const folderEl = document.getElementById('bulk-folder');
-    const folderSel = folderEl ? folderEl.value : undefined;
+    const deckEl = document.getElementById('bulk-deck');
+    const target = deckEl && state.decks.some(d => d.id === deckEl.value) ? deckEl.value : state.currentDeckId;
     if (cards.length === 0) return;
     const stamp = Date.now();
     cards.forEach((c, i) => {
-      const nc = { id: 'c-' + stamp + '-' + i, deckId: state.currentDeckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() };
-      setCardFolder(nc, folderSel);
-      state.cards.push(nc);
+      state.cards.push({ id: 'c-' + stamp + '-' + i, deckId: target, front: c.front, back: c.back, box: 0, nextReview: todayStr() });
     });
     state.showBulk = false;
     persist(); refresh();
@@ -769,47 +856,8 @@ window.App = {
     state.showAddRubrique = false; state.showEditRubrique = false; state.editingRubriqueId = null;
     state.showAddDeck = false; state.showEditDeck = false; state.editingDeckId = null;
     state.showAddCard = false; state.showEditCard = false; state.editingCardId = null;
-    state.showBulk = false; state.showFolder = false; state.editingFolderId = null;
+    state.showBulk = false; state.newDeckParentId = null;
     refresh();
-  },
-
-  // ---- Sections d'un paquet (comme des dossiers) ----
-  setScope(deckId, id) { state.deckScope[deckId] = id; refresh(); },
-  openAddFolder() { state.editingFolderId = null; state.showFolder = true; refresh(); },
-  openEditFolder(id) { state.editingFolderId = id; state.showFolder = true; refresh(); },
-  saveFolder() {
-    const name = document.getElementById('folder-name').value.trim().slice(0, 60);
-    const d = state.decks.find(x => x.id === state.currentDeckId);
-    if (!name || !d) return;
-    d.folders = d.folders || [];
-    if (state.editingFolderId) {
-      const f = d.folders.find(x => x.id === state.editingFolderId);
-      if (f) f.name = name;
-    } else {
-      const f = { id: 'f-' + Date.now(), name };
-      d.folders.push(f);
-      state.deckScope[d.id] = f.id; // on se place dans la section qu'on vient de créer
-    }
-    state.showFolder = false; state.editingFolderId = null;
-    persist(); refresh();
-  },
-  deleteFolder(id) {
-    const d = state.decks.find(x => x.id === state.currentDeckId);
-    const f = d && (d.folders || []).find(x => x.id === id);
-    if (!f) return;
-    const n = state.cards.filter(c => c.deckId === d.id && c.folderId === id).length;
-    askConfirm({
-      title: 'Supprimer la section ?',
-      body: '« ' + f.name + ' » sera supprimée. ' + (n ? 'Ses ' + n + ' carte(s) ne sont pas supprimées : elles passent dans « Sans section ».' : 'Elle est vide.'),
-      label: 'Supprimer', danger: true,
-      onConfirm() {
-        state.cards.forEach(c => { if (c.deckId === d.id && c.folderId === id) delete c.folderId; });
-        d.folders = d.folders.filter(x => x.id !== id);
-        if (!d.folders.length) delete d.folders;
-        if (state.deckScope[d.id] === id) state.deckScope[d.id] = 'all';
-        persist(); refresh();
-      }
-    });
   },
 
   // ---- Démarrage d'une session ----
@@ -835,20 +883,31 @@ window.App = {
     state.session = s; state.view = 'session'; refresh();
   },
   openMedleyScope(deckId) {
+    state.dropOpen = null;
     state.session = { mode: 'medley', deckId, deckName: targetName(deckId), scopeChoicePending: true, queue: [], index: 0, reviewedCount: 0 };
     state.view = 'session'; refresh();
   },
   startMedley(deckId, scope) {
     const pool = shuffle(scope === 'due' ? (targetDue(deckId).length ? targetDue(deckId) : targetCards(deckId)) : targetCards(deckId));
     ensureAutoCloze(pool);
-    const s = { mode: 'medley', deckId, deckName: targetName(deckId), reviewedCount: 0, index: 0, scope };
-    if (pool.length >= 4) {
-      const batch = pool.slice(0, Math.min(6, pool.length));
-      s.phase = 'matching'; s.matchBatch = batch; s.pendingQueue = pool.slice(batch.length);
+    const wantMatch = state.medleyModes.includes('appariement');
+    const singles = medleySingles();
+    let s;
+    if (wantMatch && singles.length === 0) {
+      // Seul l'appariement est coché : on enchaîne des lots de 6 paires.
+      const batches = splitBatches(pool, 6);
+      s = { mode: 'appariement', deckId, deckName: targetName(deckId), batches, batchIndex: 0, matchBatch: batches[0], queue: batches[0], index: 0, reviewedCount: 0 };
       prepareMatching(s);
     } else {
-      s.phase = 'single'; s.queue = pool; s.cardModes = pool.map(() => pickRandom(['flash', 'qcm', 'texte']));
-      prepareCurrentCard(s);
+      s = { mode: 'medley', deckId, deckName: targetName(deckId), reviewedCount: 0, index: 0, scope };
+      if (wantMatch && pool.length >= 4) {
+        const batch = pool.slice(0, Math.min(6, pool.length));
+        s.phase = 'matching'; s.matchBatch = batch; s.pendingQueue = pool.slice(batch.length);
+        prepareMatching(s);
+      } else {
+        s.phase = 'single'; s.queue = pool; s.cardModes = pool.map(() => pickRandom(singles.length ? singles : ['flash']));
+        prepareCurrentCard(s);
+      }
     }
     state.session = s; state.view = 'session'; refresh();
   },
@@ -883,7 +942,7 @@ window.App = {
       s.queue = s.pendingQueue || [];
       s.index = 0;
       s.reviewedCount += s.matchBatch.length;
-      s.cardModes = s.queue.map(() => pickRandom(['flash', 'qcm', 'texte']));
+      s.cardModes = s.queue.map(() => pickRandom(medleySingles()));
       s.matchFronts = null;
       prepareCurrentCard(s);
       if (s.queue.length === 0) s.done = true;

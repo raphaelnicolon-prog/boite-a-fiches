@@ -4,7 +4,7 @@
 
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
-  scopedCards, scopedDue, allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, normalize,
+  scopedCards, scopedDue, selectedIds, childDecks, treeNodes, treeCards, dueTree, allDecksOf, deckPath, descendantIds, rootDeckId, allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, normalize,
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
   weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak, APP_VERSION
 } from './state.js';
@@ -45,7 +45,6 @@ export function render() {
   if (state.showAddCard) app.insertAdjacentHTML('beforeend', renderCardModal(null));
   if (state.showEditCard) app.insertAdjacentHTML('beforeend', renderCardModal(state.editingCardId));
   if (state.showBulk) app.insertAdjacentHTML('beforeend', renderBulkModal());
-  if (state.showFolder) app.insertAdjacentHTML('beforeend', renderFolderModal());
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
   if (state.showFeedback) app.insertAdjacentHTML('beforeend', renderFeedbackModal());
@@ -109,6 +108,26 @@ function settingsRow(icon, title, desc, onclick) {
     + '<span class="settings-txt"><span class="mode-title">' + title + '</span><span class="mode-desc">' + desc + '</span></span>'
     + '<span class="chev">›</span></button>';
 }
+// Liste déroulante à cocher : un en-tête (titre + résumé) qui s'ouvre sur des lignes avec case.
+// items = [{ id, label, count, depth, state: 'on' | 'part' | 'off' }] ; call(item) = code JS exécuté au clic.
+function dropdown(key, title, summary, items, call, allCall) {
+  const open = state.dropOpen === key;
+  let h = '<div class="dd' + (open ? ' open' : '') + '"><button class="dd-head" onclick="App.toggleDrop(\'' + key + '\')">'
+    + '<span class="dd-text"><span class="dd-title">' + title + '</span><span class="dd-val">' + summary + '</span></span>'
+    + '<span class="dd-chev">' + (open ? '⌃' : '⌄') + '</span></button>';
+  if (open) {
+    h += '<div class="dd-panel">';
+    if (allCall) h += '<button class="dd-row dd-all" onclick="' + allCall + '"><span class="dd-box on">✓</span><span class="dd-label">Tout cocher</span></button>';
+    h += items.map(function (it) {
+      return '<button class="dd-row" style="padding-left:' + (14 + (it.depth || 0) * 18) + 'px;" onclick="' + call(it) + '">'
+        + '<span class="dd-box ' + it.state + '">' + (it.state === 'on' ? '✓' : it.state === 'part' ? '–' : '') + '</span>'
+        + '<span class="dd-label">' + esc(it.label) + '</span>' + (it.count !== undefined ? '<span class="dd-count">' + it.count + '</span>' : '') + '</button>';
+    }).join('');
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
 function renderSettings() {
   const lv = playerLevel();
   const rem = state.meta.reminder;
@@ -240,23 +259,14 @@ function renderRubrique() {
   let html = '<button class="backbtn" onclick="App.backHome()">‹ Réviser</button>';
   html += '<div class="eyebrow" style="color:' + colorVar(r.color) + ';">' + esc(r.name) + '</div><h1 class="title">' + deckPickerTitle(r) + '</h1>';
   html += aiButton(r);
-  const rubCards = decks.reduce((n, d) => n + cardsOf(d.id).length, 0);
+  const rubCards = allDecksOf(r.id).reduce((n, d) => n + cardsOf(d.id).length, 0);
   if (rubCards >= 2) html += '<div class="mode-card medley" style="cursor:pointer;margin-bottom:16px;" onclick="App.openMedleyScope(\'R:' + r.id + '\')">'
     + '<div><div class="mode-title">✨ Quizz Medley de la rubrique</div><div class="mode-desc">Mélange tous les paquets · ' + rubCards + ' cartes</div></div><span class="chev">›</span></div>';
   if (decks.length === 0) { html += '<div class="subtitle">Aucun paquet ici pour l\'instant.</div>'; }
-  decks.forEach(function (d) {
-    const due = dueCards(d.id).length;
-    const total = cardsOf(d.id).length;
-    html += '<div class="deck-card" onclick="App.openDeck(\'' + d.id + '\')" style="cursor:pointer;">'
-      + '<div class="deck-top" style="background:' + colorVar(r.color) + ';"></div>'
-      + '<div class="row between"><div><div class="rub-name">' + esc(d.name) + '</div>'
-      + '<div class="rub-meta">' + (total === 0 ? 'vide' : (due + ' / ' + total + ' à revoir · maîtrise ' + deckMastery(d.id) + ' %')) + '</div></div>'
-      + '<div class="row">'
-      + '<button class="hidebtn" onclick="event.stopPropagation();App.openEditDeck(\'' + d.id + '\')">modifier</button>'
-      + '<button class="hidebtn" onclick="event.stopPropagation();App.deleteDeck(\'' + d.id + '\')">supprimer</button>'
-      + '<span class="chev">›</span>'
-      + '</div></div></div>';
-  });
+  if (decks.length > 1) html += '<div class="row between" style="margin:0 0 8px;"><span></span><button class="toggle-reorder" onclick="App.toggleReorder()">' + (state.reorderMode ? 'Terminé' : 'Réorganiser') + '</button></div>';
+  html += '<div id="deck-list">';
+  decks.forEach(function (d) { html += deckRowHtml(d, r); });
+  html += '</div>';
   html += '<button class="add-row" onclick="App.openAddDeck()">+ Nouveau paquet</button>';
   html += partnerCard(r);
   return html;
@@ -273,31 +283,62 @@ function addCardsBlock(d) {
     + '</div>';
 }
 
-// Choix de la section (comme un dossier) dont on veut réviser les cartes.
-function scopeChips(d) {
-  const fs = d.folders || [];
-  if (!fs.length) return '';
-  const cur = state.deckScope[d.id] || 'all';
-  const all = cardsOf(d.id);
-  const ids = new Set(fs.map(f => f.id));
-  const chip = (id, label, n) => '<button class="chip wide' + (cur === id ? ' sel' : '') + '" onclick="App.setScope(\'' + d.id + '\',\'' + id + '\')">' + label + ' · ' + n + '</button>';
-  let h = '<div class="chip-row" style="margin:2px 0 16px;">' + chip('all', 'Tout', all.length);
-  fs.forEach(f => { h += chip(f.id, esc(f.name), all.filter(c => c.folderId === f.id).length); });
-  const none = all.filter(c => !c.folderId || !ids.has(c.folderId)).length;
-  if (none) h += chip('none', 'Sans section', none);
-  return h + '</div>';
+// Ligne d'un paquet (dans une rubrique ou dans un autre paquet), réordonnable par glisser-déposer.
+function deckRowHtml(d, r) {
+  const total = treeCards(d.id).length;
+  const due = dueTree(d.id).length;
+  const kids = childDecks(d.id).length;
+  const go = state.reorderMode ? '' : 'App.openDeck(\'' + d.id + '\')';
+  return '<div class="deck-card rub-item" data-id="' + d.id + '" onclick="' + go + '" style="cursor:pointer;">'
+    + '<div class="deck-top" style="background:' + colorVar(r.color) + ';"></div>'
+    + '<div class="row between"><div style="min-width:0;"><div class="rub-name">' + esc(d.name) + '</div>'
+    + '<div class="rub-meta">' + (total === 0 && !kids ? 'vide' : (kids ? pl(kids, 'sous-paquet') + ' · ' : '') + due + ' / ' + total + ' à revoir · maîtrise ' + deckMastery(d.id) + ' %') + '</div></div>'
+    + '<div class="row">'
+    + (state.reorderMode
+      ? '<button class="hidebtn" onclick="event.stopPropagation();App.openEditDeck(\'' + d.id + '\')">modifier</button><div class="drag-handle" onclick="event.stopPropagation();" title="Glisser pour réordonner">⠿</div>'
+      : '<button class="hidebtn" onclick="event.stopPropagation();App.openEditDeck(\'' + d.id + '\')">modifier</button>'
+        + '<button class="hidebtn" onclick="event.stopPropagation();App.deleteDeck(\'' + d.id + '\')">supprimer</button><span class="chev">›</span>')
+    + '</div></div></div>';
+}
+
+// Liste déroulante « Contenu à réviser » : un paquet et ses sous-paquets, à cocher / décocher.
+function contentDropdown(d) {
+  if (!childDecks(d.id).length) return '';
+  const nodes = treeNodes(d.id);
+  const sel = new Set(selectedIds(d.id));
+  const stateOf = function (id) {
+    const ids = descendantIds(id);
+    const n = ids.filter(x => sel.has(x)).length;
+    return n === ids.length ? 'on' : n === 0 ? 'off' : 'part';
+  };
+  const items = nodes.map(function (n) {
+    const node = state.decks.find(x => x.id === n.id);
+    const hasKids = childDecks(n.id).length > 0;
+    // Pour le paquet lui-même, on précise qu'il s'agit de ses cartes directes.
+    return { id: n.id, depth: n.depth, label: n.depth === 0 ? 'Cartes de « ' + node.name + ' »' : node.name,
+      count: n.depth === 0 ? cardsOf(n.id).length : treeCards(n.id).length,
+      state: n.depth === 0 ? (sel.has(n.id) ? 'on' : 'off') : stateOf(n.id), hasKids };
+  }).filter(it => !(it.depth === 0 && it.count === 0));
+  const total = nodes.length;
+  const all = sel.size === total;
+  const summary = all ? 'Tout le paquet' : sel.size + ' sur ' + total + ' sections';
+  return dropdown('content', 'Contenu à réviser', summary + ' · ' + pl(scopedCards(d.id).length, 'carte'), items,
+    it => 'App.toggleSel(\'' + d.id + '\',\'' + it.id + '\')', all ? '' : 'App.selAll(\'' + d.id + '\')');
 }
 
 function renderModes() {
   const d = state.decks.find(x => x.id === state.currentDeckId);
   if (!d) return renderHome();
   const r = state.rubriques.find(x => x.id === d.rubriqueId);
+  const parent = d.parentId ? state.decks.find(x => x.id === d.parentId) : null;
   const total = scopedCards(d.id).length;
   const due = scopedDue(d.id).length;
-  let html = '<button class="backbtn" onclick="App.openRubrique(\'' + r.id + '\')">‹ ' + esc(r.name) + '</button>';
-  html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Choisis ton mode</h1>';
+  const kids = childDecks(d.id);
+  let html = '<button class="backbtn" onclick="App.backFromDeck()">‹ ' + esc(parent ? parent.name : r.name) + '</button>';
+  html += '<div class="eyebrow">' + esc(parent ? deckPath(d.id) : r.name) + '</div><h1 class="title">' + esc(d.name) + '</h1>';
   html += '<div class="subtitle">' + (total === 0 ? 'Aucune carte ici : ajoutes-en pour commencer.' : (due > 0 ? due + ' à revoir aujourd\'hui · ' : 'Rien à revoir aujourd\'hui · ') + pl(total, 'carte')) + '</div>';
-  html += scopeChips(d);
+  html += contentDropdown(d);
+  html += '<div class="section-label">Réviser</div>';
   MODES.forEach(function (m) {
     const enough = total >= m.min;
     html += '<div class="mode-card" style="opacity:' + (enough ? 1 : .45) + ';" onclick="' + (enough ? ('App.startMode(\'' + m.id + '\',\'' + d.id + '\')') : '') + '">'
@@ -306,9 +347,16 @@ function renderModes() {
   });
   const enoughMedley = total >= 2;
   html += '<div class="mode-card medley" style="opacity:' + (enoughMedley ? 1 : .45) + ';" onclick="' + (enoughMedley ? ('App.openMedleyScope(\'' + d.id + '\')') : '') + '">'
-    + '<div><div class="mode-title">✨ Quizz Medley</div><div class="mode-desc">Mélange de tous les modes disponibles</div></div><span class="chev">›</span></div>';
+    + '<div><div class="mode-title">✨ Quizz Medley</div><div class="mode-desc">Mélange des modes que tu choisis</div></div><span class="chev">›</span></div>';
+
+  // Contenu du paquet : sous-paquets (comme des dossiers) puis cartes.
+  html += '<div class="row between" style="margin:26px 0 10px;"><div class="section-label" style="margin:0;">Sous-paquets</div>'
+    + (kids.length > 1 ? '<button class="toggle-reorder" onclick="App.toggleReorder()">' + (state.reorderMode ? 'Terminé' : 'Réorganiser') + '</button>' : '') + '</div>';
+  html += '<div id="deck-list">' + kids.map(k => deckRowHtml(k, r)).join('') + '</div>';
+  html += '<button class="add-row" style="margin-top:' + (kids.length ? 4 : 0) + 'px;" onclick="App.openAddSubDeck()">+ Nouveau sous-paquet</button>';
+  if (!kids.length) html += '<div class="rub-meta" style="margin-top:8px;">Pour ranger ce paquet par thèmes ou par séances, comme des dossiers.</div>';
   html += addCardsBlock(d);
-  html += '<button class="manage-link" onclick="App.openCards(\'' + d.id + '\')">Cartes et sections (' + cardsOf(d.id).length + ')</button>';
+  html += '<button class="manage-link" onclick="App.openCards(\'' + d.id + '\')">Voir et modifier les cartes (' + treeCards(d.id).length + ')</button>';
   return html;
 }
 
@@ -316,9 +364,8 @@ function renderModes() {
 function renderCards() {
   const d = state.decks.find(x => x.id === state.currentDeckId);
   if (!d) return renderHome();
-  const cards = cardsOf(d.id);
-  const fs = d.folders || [];
-  const fids = new Set(fs.map(f => f.id));
+  const nodes = treeNodes(d.id);
+  const total = treeCards(d.id).length;
   const cardRow = function (c) {
     return '<div class="list-item"><div class="row between" style="align-items:flex-start;">'
       + '<div style="min-width:0;"><div class="rub-name">' + esc(c.front) + '</div><div class="rub-meta">' + esc(c.back) + '</div></div>'
@@ -329,44 +376,29 @@ function renderCards() {
   };
   let html = '<button class="backbtn" onclick="App.openDeck(\'' + d.id + '\')">‹ ' + esc(d.name) + '</button>';
   html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Tes cartes</h1>';
-  html += '<div class="subtitle">' + pl(cards.length, 'carte') + (fs.length ? ' · ' + pl(fs.length, 'section') : '') + '</div>';
-
-  // Sections : des dossiers pour classer les cartes d'un même paquet (ex. vocabulaire / règles).
-  html += '<div class="section-label">Sections</div>';
-  fs.forEach(function (f) {
-    const n = cards.filter(c => c.folderId === f.id).length;
-    html += '<div class="list-item"><div class="row between"><div style="min-width:0;"><div class="rub-name">' + esc(f.name) + '</div><div class="rub-meta">' + pl(n, 'carte') + '</div></div>'
-      + '<div class="row card-actions"><button class="hidebtn" onclick="App.openEditFolder(\'' + f.id + '\')">renommer</button>'
-      + '<button class="hidebtn" onclick="App.deleteFolder(\'' + f.id + '\')">supprimer</button></div></div></div>';
-  });
-  html += '<button class="add-row" style="margin-top:' + (fs.length ? 10 : 0) + 'px;" onclick="App.openAddFolder()">+ Nouvelle section</button>';
-  if (!fs.length) html += '<div class="rub-meta" style="margin-top:8px;">Exemple : « Vocabulaire », « Règles », « Séance 1 »… Tu pourras réviser une section à la fois, ou tout mélanger.</div>';
-
+  html += '<div class="subtitle">' + pl(total, 'carte') + (nodes.length > 1 ? ' · ' + pl(nodes.length - 1, 'sous-paquet') : '') + '</div>';
   html += addCardsBlock(d);
-  if (cards.length) html += '<div style="margin:4px 0 16px;"><button class="link" onclick="App.shareDeck()">Partager ce paquet avec un camarade</button></div>';
-
-  if (!fs.length) {
-    if (cards.length) html += '<div class="section-label">Les cartes du paquet</div>';
-    cards.forEach(c => { html += cardRow(c); });
-    return html;
-  }
-  fs.forEach(function (f) {
-    const list = cards.filter(c => c.folderId === f.id);
+  if (total) html += '<div style="margin:4px 0 16px;"><button class="link" onclick="App.shareDeck()">Partager ce paquet avec un camarade</button></div>';
+  const multi = nodes.length > 1;
+  nodes.forEach(function (n) {
+    const list = cardsOf(n.id);
     if (!list.length) return;
-    html += '<div class="section-label">' + esc(f.name) + ' · ' + list.length + '</div>';
+    if (multi) html += '<div class="section-label">' + esc(n.depth === 0 ? 'Cartes de ce paquet' : deckPath(n.id).split(' › ').slice(deckPath(d.id).split(' › ').length).join(' › ')) + ' · ' + list.length + '</div>';
+    else html += '<div class="section-label">Les cartes du paquet</div>';
     list.forEach(c => { html += cardRow(c); });
   });
-  const loose = cards.filter(c => !c.folderId || !fids.has(c.folderId));
-  if (loose.length) {
-    html += '<div class="section-label">Sans section · ' + loose.length + '</div>';
-    loose.forEach(c => { html += cardRow(c); });
-  }
   return html;
 }
 
 function renderMedleyScope(deckId) {
+  const labels = { flash: 'Flashcard', qcm: 'QCM', texte: 'Texte à trous', appariement: 'Appariement' };
+  const ms = state.medleyModes;
+  const items = ['flash', 'qcm', 'texte', 'appariement'].map(m => ({ id: m, label: labels[m], state: ms.includes(m) ? 'on' : 'off' }));
+  const summary = ms.length === 4 ? 'Tous les modes' : ms.map(m => labels[m]).join(', ');
   return '<div class="center" style="padding-top:30px;">'
-    + '<div class="eyebrow">Quizz Medley</div><h1 class="title">Quelles cartes ?</h1>'
+    + '<div class="eyebrow">Quizz Medley</div><h1 class="title">Ton mélange</h1>'
+    + '<div style="width:100%;text-align:left;">' + dropdown('medley', 'Modes inclus', esc(summary), items, it => 'App.toggleMedleyMode(\'' + it.id + '\')', '') + '</div>'
+    + '<div class="section-label" style="align-self:flex-start;margin-top:8px;">Quelles cartes ?</div>'
     + '<div class="scope-row">'
     + '<button class="scope-opt" onclick="App.startMedley(\'' + deckId + '\',\'due\')">Seulement celles dues aujourd\'hui</button>'
     + '<button class="scope-opt" onclick="App.startMedley(\'' + deckId + '\',\'wide\')">Mélange plus large, même déjà sues</button>'
@@ -506,37 +538,49 @@ function renderRubriqueModal(editId) {
     + '<button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveRubrique()">' + (editing ? 'Enregistrer' : 'Créer') + '</button></div>'
     + '</div></div>';
 }
+// Menu « Emplacement » pour déplacer un paquet : racine d'une rubrique ou dans un autre paquet.
+function locationSelect(deck) {
+  let h = '<label>Emplacement</label><select id="deck-loc"><option value="">Ne pas déplacer</option>';
+  state.rubriques.forEach(function (r) {
+    h += '<option value="R:' + r.id + '">Rubrique : ' + esc(r.name) + '</option>';
+    const walk = function (id, depth) {
+      if (id === deck.id) return; // on ne se range pas dans soi-même
+      const x = state.decks.find(y => y.id === id);
+      h += '<option value="D:' + id + '">' + '  '.repeat(depth) + '↳ ' + esc(x.name) + '</option>';
+      childDecks(id).forEach(c => walk(c.id, depth + 1));
+    };
+    decksOfRoot(r.id).forEach(d0 => walk(d0.id, 1));
+  });
+  return h + '</select>';
+}
+function decksOfRoot(rid) { return decksOf(rid); }
 function renderDeckModal(editId) {
   const editing = editId ? state.decks.find(x => x.id === editId) : null;
+  const parent = !editing && state.newDeckParentId ? state.decks.find(x => x.id === state.newDeckParentId) : null;
+  const lang = editing ? editing.speakLang : (parent ? parent.speakLang : '');
   return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeModals()"><div class="modal">'
-    + '<div class="eyebrow">' + (editing ? 'Modifier le paquet' : 'Nouveau paquet') + '</div>'
-    + '<label>Nom</label><input id="deck-name" placeholder="ex: Espagnol, ou Marketing" value="' + (editing ? esc(editing.name) : '') + '"/>'
+    + '<div class="eyebrow">' + (editing ? 'Modifier le paquet' : (parent ? 'Nouveau sous-paquet' : 'Nouveau paquet')) + '</div>'
+    + (parent ? '<div class="rub-meta" style="margin-top:6px;">Dans « ' + esc(deckPath(parent.id)) + ' »</div>' : '')
+    + '<label>Nom</label><input id="deck-name" placeholder="' + (parent ? 'ex: Vocabulaire du voyage, ou Séance 3' : 'ex: Espagnol, ou Marketing') + '" value="' + (editing ? esc(editing.name) : '') + '"/>'
     + '<label>Lecture audio du recto</label><select id="deck-lang">'
-    + SPEAK_LANGS.map(function (l) { return '<option value="' + l.code + '"' + (editing && editing.speakLang === l.code ? ' selected' : '') + '>' + l.label + '</option>'; }).join('')
+    + SPEAK_LANGS.map(function (l) { return '<option value="' + l.code + '"' + (lang === l.code ? ' selected' : '') + '>' + l.label + '</option>'; }).join('')
     + '</select>'
+    + (editing ? locationSelect(editing) : '')
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveDeck()">' + (editing ? 'Enregistrer' : 'Créer') + '</button></div>'
     + '</div></div>';
 }
-// Menu « Section » (seulement si le paquet en a). current = id de la section présélectionnée.
-function folderSelect(id, current) {
-  const d = state.decks.find(x => x.id === state.currentDeckId);
-  const fs = (d && d.folders) || [];
-  if (!fs.length) return '';
-  return '<label>Section</label><select id="' + id + '"><option value="">Sans section</option>'
-    + fs.map(f => '<option value="' + f.id + '"' + (f.id === current ? ' selected' : '') + '>' + esc(f.name) + '</option>').join('') + '</select>';
-}
-function currentFolderId() {
-  const f = state.deckScope[state.currentDeckId];
-  return f && f !== 'all' && f !== 'none' ? f : '';
-}
-function renderFolderModal() {
-  const d = state.decks.find(x => x.id === state.currentDeckId);
-  const editing = state.editingFolderId && d ? (d.folders || []).find(x => x.id === state.editingFolderId) : null;
-  return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeModals()"><div class="modal">'
-    + '<div class="eyebrow">' + (editing ? 'Renommer la section' : 'Nouvelle section') + '</div>'
-    + '<label>Nom</label><input id="folder-name" placeholder="ex: Vocabulaire du voyage" value="' + (editing ? esc(editing.name) : '') + '"/>'
-    + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveFolder()">' + (editing ? 'Enregistrer' : 'Créer') + '</button></div>'
-    + '</div></div>';
+// Menu « Paquet » d'une carte : tous les paquets de la même rubrique, avec leur arborescence.
+function deckSelect(id, current) {
+  const base = state.decks.find(x => x.id === state.currentDeckId);
+  if (!base) return '';
+  const root = rootDeckId(base.id);
+  const nodes = treeNodes(root);
+  if (nodes.length < 2) return '';
+  return '<label>Paquet</label><select id="' + id + '">'
+    + nodes.map(function (n) {
+      const x = state.decks.find(y => y.id === n.id);
+      return '<option value="' + n.id + '"' + (n.id === current ? ' selected' : '') + '>' + '  '.repeat(n.depth) + (n.depth ? '↳ ' : '') + esc(x.name) + '</option>';
+    }).join('') + '</select>';
 }
 function renderCardModal(editId) {
   const editing = editId ? state.cards.find(x => x.id === editId) : null;
@@ -544,7 +588,7 @@ function renderCardModal(editId) {
     + '<div class="eyebrow">' + (editing ? 'Modifier la carte' : 'Nouvelle carte') + '</div>'
     + '<label>Recto (question / mot)</label><textarea id="card-front" placeholder="ex: Qu\'est-ce que le SECI model ?">' + (editing ? esc(editing.front) : '') + '</textarea>'
     + '<label>Verso (réponse / traduction)</label><textarea id="card-back" placeholder="Réponse...">' + (editing ? esc(editing.back) : '') + '</textarea>'
-    + folderSelect('card-folder', editing ? editing.folderId : currentFolderId())
+    + deckSelect('card-deck', editing ? editing.deckId : state.currentDeckId)
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveCard()">Enregistrer</button></div>'
     + '</div></div>';
 }
@@ -554,7 +598,7 @@ function renderBulkModal() {
     + '<div class="rub-meta" style="margin-top:8px;">Une carte par ligne, sous la forme <b>recto ; verso</b>. Tu peux aussi coller directement deux colonnes copiées depuis Excel ou Google Sheets.</div>'
     + '<label>Tes cartes</label><label class="link file-link">Importer un fichier .csv ou .txt<input type="file" accept=".csv,.tsv,.txt,text/plain,text/csv" style="display:none;" onchange="App.loadBulkFile(this)"/></label><textarea id="bulk-text" style="min-height:150px;" placeholder="Buongiorno ; Bonjour&#10;Grazie mille ; Merci beaucoup&#10;Arrivederci ; Au revoir" oninput="App.previewBulk(this.value)"></textarea>'
     + '<div class="rub-meta" id="bulk-preview" style="margin-top:8px;">Rien à ajouter pour l\'instant.</div>'
-    + folderSelect('bulk-folder', currentFolderId())
+    + deckSelect('bulk-deck', state.currentDeckId)
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveBulk()">Ajouter</button></div>'
     + '</div></div>';
 }
@@ -631,7 +675,7 @@ function renderCreate() {
     + '</div>';
   if (decks.length) {
     html += '<div class="section-label">Ajouter des cartes à…</div><div class="settings-group">'
-      + decks.map(function (d) { return settingsRow('🃏', esc(d.name), cardsOf(d.id).length + ' carte' + (cardsOf(d.id).length > 1 ? 's' : ''), 'App.openDeckCards(\'' + d.id + '\')'); }).join('')
+      + decks.map(function (d) { return settingsRow('🃏', esc(d.name), pl(treeCards(d.id).length, 'carte'), 'App.openDeckCards(\'' + d.id + '\')'); }).join('')
       + '</div>';
   }
   return html;
@@ -653,8 +697,8 @@ function aiButton(r) {
 // Choisit des cours en ligne d'après ce que la personne révise vraiment : les paquets qui
 // ont des cartes, les plus « à revoir » d'abord. keep = filtre facultatif sur les paquets.
 function recommendations(limit, keep) {
-  const decks = state.decks.filter(d => cardsOf(d.id).length > 0 && (!keep || keep(d)));
-  decks.sort((a, b) => dueCards(b.id).length - dueCards(a.id).length || cardsOf(b.id).length - cardsOf(a.id).length);
+  const decks = state.decks.filter(d => !d.parentId && treeCards(d.id).length > 0 && (!keep || keep(d)));
+  decks.sort((a, b) => dueTree(b.id).length - dueTree(a.id).length || treeCards(b.id).length - treeCards(a.id).length);
   const seen = new Set();
   const out = [];
   decks.forEach(function (d) {
@@ -668,7 +712,7 @@ function recommendations(limit, keep) {
     if (seen.has(t.title)) return;
     seen.add(t.title);
     const prov = MOOC_PROVIDERS[t.providers[out.length % t.providers.length]];
-    const due = dueCards(d.id).length;
+    const due = dueTree(d.id).length;
     out.push({ provider: prov.name, title: t.title, desc: t.desc, url: prov.url(t.query),
       why: 'Parce que tu révises « ' + d.name + ' »' + (due ? ' · ' + pl(due, 'carte') + ' à revoir' : '') });
   });
@@ -799,16 +843,28 @@ function renderMulti() {
     + '<div style="flex:1;min-width:0;"><div class="mode-title">' + esc(state.profile.pseudo) + ' · niveau ' + lv.level + '</div>'
     + '<div class="mode-desc">' + m.weekPoints + ' pts cette semaine · ' + pl(m.wins, 'victoire') + ' sur ' + pl(m.played, 'duel') + '</div></div></div>';
 
-  const curMode = DUEL_MODES.find(x => x.id === state.multiMode) || DUEL_MODES[0];
-  html += '<div class="section-label">Format de partie</div><div class="chip-row" style="margin-bottom:12px;">'
-    + DUEL_MODES.map(function (x) { return '<button class="chip wide' + (x.id === curMode.id ? ' sel' : '') + '" onclick="App.setMultiMode(\'' + x.id + '\')">' + x.emoji + ' ' + x.label + '</button>'; }).join('') + '</div>';
-  const themes = eligibleDecks();
-  const curTheme = themes.find(d => d.id === state.multiDeckId) || null;
-  html += '<div class="section-label">Thème</div><div class="chip-row" style="margin-bottom:12px;">'
-    + '<button class="chip wide' + (curTheme ? '' : ' sel') + '" onclick="App.setMultiDeck(\'random\')">🔀 Au hasard</button>'
-    + themes.map(function (d) { return '<button class="chip wide' + (curTheme && curTheme.id === d.id ? ' sel' : '') + '" onclick="App.setMultiDeck(\'' + d.id + '\')">' + esc(d.name) + '</button>'; }).join('') + '</div>';
-  html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;" onclick="App.quickMatch()">'
-    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Adversaire au hasard · ' + (curTheme ? esc(curTheme.name) : 'thème au hasard') + ' · ' + esc(curMode.desc) + '</div></div><span class="chev">›</span></button>';
+  const fm = state.multiModes;
+  const formatItems = DUEL_MODES.map(x => ({ id: x.id, label: x.label, state: fm.includes(x.id) ? 'on' : 'off' }));
+  const formatSummary = fm.length === DUEL_MODES.length ? 'Tous les formats' : DUEL_MODES.filter(x => fm.includes(x.id)).map(x => x.label).join(', ');
+  html += dropdown('formats', 'Format de partie', esc(formatSummary), formatItems, it => 'App.toggleMultiMode(\'' + it.id + '\')', '');
+
+  const ok = new Set(eligibleDecks().map(d => d.id));
+  const checked = state.multiThemes ? new Set(state.multiThemes.filter(id => ok.has(id))) : ok;
+  const themeItems = [];
+  state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order).forEach(function (r) {
+    decksOf(r.id).forEach(function (d0) {
+      treeNodes(d0.id).forEach(function (n) {
+        if (!ok.has(n.id)) return;
+        const ids = descendantIds(n.id).filter(x => ok.has(x));
+        const k = ids.filter(x => checked.has(x)).length;
+        themeItems.push({ id: n.id, depth: n.depth, label: state.decks.find(x => x.id === n.id).name, count: treeCards(n.id).length, state: k === ids.length ? 'on' : k === 0 ? 'off' : 'part' });
+      });
+    });
+  });
+  const themeSummary = checked.size === ok.size ? 'Tous les paquets (au hasard)' : (checked.size === 1 ? esc(state.decks.find(x => x.id === [...checked][0]).name) : checked.size + ' paquets');
+  html += dropdown('themes', 'Thèmes', themeSummary, themeItems, it => 'App.toggleMultiTheme(\'' + it.id + '\')', checked.size === ok.size ? '' : 'App.allMultiThemes()');
+  html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;margin-top:14px;" onclick="App.quickMatch()">'
+    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Adversaire au hasard · ' + esc(formatSummary) + ' · ' + esc(themeSummary) + '</div></div><span class="chev">›</span></button>';
   html += '<div class="mode-card" style="cursor:pointer;" onclick="App.dailyChallenge()"><div><div class="mode-title">🎯 Défi du jour' + (dailyDone ? ' ✓' : '') + '</div>'
     + '<div class="mode-desc">' + (dailyDone ? 'Relevé aujourd\'hui · reviens demain' : 'Un Medley express · +20 points bonus') + '</div></div><span class="chev">›</span></div>';
   html += '<div class="rub-meta" style="margin-top:14px;">Prototype : adversaires et classement simulés.</div>';
@@ -1180,7 +1236,7 @@ function renderFeedbackModal() {
 
 // Maîtrise d'un paquet en % : moyenne des cases de Leitner (0 à 5) de ses cartes.
 function deckMastery(deckId) {
-  const cards = cardsOf(deckId);
+  const cards = treeCards(deckId);
   if (cards.length === 0) return 0;
   return Math.round(cards.reduce((a, c) => a + Math.min(c.box, 5), 0) / (cards.length * 5) * 100);
 }

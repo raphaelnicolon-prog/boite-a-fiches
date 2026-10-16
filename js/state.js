@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '39';
+export const APP_VERSION = '40';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -66,11 +66,12 @@ export const state = {
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
   createRubriqueId: null, // rubrique choisie dans l'onglet « Créer »
-  deckScope: {},         // section choisie par paquet : { idDuPaquet: 'all' | 'none' | idSection } (non sauvegardé)
-  showFolder: false,
-  editingFolderId: null,
-  multiDeckId: 'random', // thème des duels : 'random' ou l'id d'un paquet
-  multiMode: 'medley',  // format des duels : 'medley', 'qcm', 'vf' ou 'match'
+  deckSel: {},           // contenu coché par paquet : { idDuPaquet: [ids des sous-paquets inclus] } ; absent = tout (non sauvegardé)
+  newDeckParentId: null, // paquet dans lequel on crée un sous-paquet (null = directement dans la rubrique)
+  dropOpen: null,        // liste déroulante ouverte (voir dropdown() dans render.js)
+  medleyModes: ['flash', 'qcm', 'texte', 'appariement'], // modes mélangés dans le Quizz Medley
+  multiThemes: null,     // thèmes des duels cochés : null = tous, sinon liste d'ids de paquets
+  multiModes: ['medley', 'qcm', 'vf', 'match'], // formats de duel cochés (un est tiré au hasard)
   leagueScope: 'general', // cercle du classement : 'general', 'amis' ou 'promo'
   ai: null,             // assistant IA en cours (formulaire, chargement, relecture)
   duel: null,           // partie multijoueur en cours (voir duel.js)
@@ -178,21 +179,67 @@ export function seedData() {
   };
 }
 
-export function decksOf(rid) {
+// ---- Arborescence des paquets (comme des dossiers) ----
+// Un paquet peut contenir des cartes ET d'autres paquets (champ parentId). Les paquets
+// d'une même liste (même parent) sont triés par leur champ « order » (posé par le glisser-déposer).
+function sortSiblings(list) {
+  return list.map((d, i) => ({ d, i })).sort((x, y) => ((x.d.order ?? x.i) - (y.d.order ?? y.i)) || (x.i - y.i)).map(x => x.d);
+}
+export function decksOf(rid) {            // paquets posés directement dans la rubrique
+  return sortSiblings(state.decks.filter(d => d.rubriqueId === rid && !d.parentId));
+}
+export function allDecksOf(rid) {         // tous les paquets de la rubrique, sous-paquets compris
   return state.decks.filter(d => d.rubriqueId === rid);
 }
-export function cardsOf(did) {
+export function childDecks(id) {
+  return sortSiblings(state.decks.filter(d => d.parentId === id));
+}
+export function nextDeckOrder(rid, parentId) {
+  const sib = parentId ? childDecks(parentId) : decksOf(rid);
+  return sib.length ? Math.max.apply(null, sib.map((d, i) => d.order ?? i)) + 1 : 0;
+}
+// Parcours en profondeur : [{ id, depth }] du paquet et de tous ses sous-paquets.
+export function treeNodes(id, depth) {
+  const out = [{ id, depth: depth || 0 }];
+  childDecks(id).forEach(c => { out.push.apply(out, treeNodes(c.id, (depth || 0) + 1)); });
+  return out;
+}
+export function descendantIds(id) {
+  return treeNodes(id).map(n => n.id);
+}
+export function rootDeckId(id) {
+  let d = state.decks.find(x => x.id === id);
+  let guard = 0;
+  while (d && d.parentId && guard++ < 50) d = state.decks.find(x => x.id === d.parentId) || null;
+  return d ? d.id : id;
+}
+export function deckPath(id) {
+  const names = [];
+  let d = state.decks.find(x => x.id === id);
+  let guard = 0;
+  while (d && guard++ < 50) { names.unshift(d.name); d = d.parentId ? state.decks.find(x => x.id === d.parentId) : null; }
+  return names.join(' › ');
+}
+export function cardsOf(did) {            // cartes posées directement dans ce paquet
   return state.cards.filter(c => c.deckId === did);
 }
-// Cartes d'un paquet restreintes à la section choisie dans l'écran du paquet
-// ('all' = tout le paquet, 'none' = cartes sans section, sinon l'id d'une section).
+export function treeCards(did) {          // cartes du paquet ET de ses sous-paquets
+  const ids = new Set(descendantIds(did));
+  return state.cards.filter(c => ids.has(c.deckId));
+}
+export function dueTree(did) {
+  const t = todayStr();
+  return treeCards(did).filter(c => c.nextReview <= t);
+}
+// Sous-paquets cochés dans la liste déroulante de l'écran d'un paquet (par défaut : tous).
+export function selectedIds(did) {
+  const all = descendantIds(did);
+  const sel = state.deckSel[did];
+  return sel ? all.filter(id => sel.includes(id)) : all;
+}
 export function scopedCards(did) {
-  const f = state.deckScope[did] || 'all';
-  const all = cardsOf(did);
-  if (f === 'all') return all;
-  const d = state.decks.find(x => x.id === did);
-  const ids = new Set(((d && d.folders) || []).map(x => x.id));
-  return f === 'none' ? all.filter(c => !c.folderId || !ids.has(c.folderId)) : all.filter(c => c.folderId === f);
+  const ids = new Set(selectedIds(did));
+  return state.cards.filter(c => ids.has(c.deckId));
 }
 export function scopedDue(did) {
   const t = todayStr();
@@ -203,7 +250,9 @@ export function dueCards(did) {
   return state.cards.filter(c => c.deckId === did && c.nextReview <= t);
 }
 export function dueInRubrique(rid) {
-  return decksOf(rid).reduce((n, d) => n + dueCards(d.id).length, 0);
+  const ids = new Set(allDecksOf(rid).map(d => d.id));
+  const t = todayStr();
+  return state.cards.filter(c => ids.has(c.deckId) && c.nextReview <= t).length;
 }
 export function allDueCards() {
   const t = todayStr();

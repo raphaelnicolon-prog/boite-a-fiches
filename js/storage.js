@@ -64,12 +64,33 @@ export function sanitizeSocial(raw) {
   return s;
 }
 
+// Les « sections » d'un paquet (version 39) sont devenues de vrais sous-paquets : on convertit
+// d'anciennes données (ou sauvegardes) une fois, sans rien perdre. Retourne true si on a converti.
+export function migrateSections(p) {
+  let changed = false;
+  const extra = [];
+  p.decks.forEach(function (d) {
+    if (!d || !Array.isArray(d.folders)) return;
+    d.folders.forEach(function (f, i) {
+      if (!f || typeof f.id !== 'string') return;
+      extra.push({ id: f.id, name: f.name, rubriqueId: d.rubriqueId, parentId: d.id, order: i, speakLang: d.speakLang });
+      p.cards.forEach(function (c) { if (c && c.deckId === d.id && c.folderId === f.id) { c.deckId = f.id; } });
+    });
+    delete d.folders;
+    changed = true;
+  });
+  p.cards.forEach(function (c) { if (c && 'folderId' in c) { delete c.folderId; changed = true; } });
+  extra.forEach(e => p.decks.push(e));
+  return changed;
+}
+
 export function loadData() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const p = JSON.parse(raw);
       if (p.rubriques && p.decks && p.cards) {
+        const migrated = migrateSections(p);
         state.rubriques = p.rubriques;
         state.decks = p.decks;
         state.cards = p.cards;
@@ -84,6 +105,7 @@ export function loadData() {
         state.multi = sanitizeMulti(p.multi);
         state.social = sanitizeSocial(p.social);
         state.profile = sanitizeProfile(p.profile);
+        if (migrated) persist();
         return;
       }
     }
@@ -151,6 +173,7 @@ export function parseBackup(text) {
     return { ok: false, error: 'Ce fichier ne ressemble pas à une sauvegarde de la Boîte à Fiches.' };
   }
 
+  migrateSections(p);
   const colorKeys = Object.keys(CALM_COLORS);
   const seen = new Set();
   const rubriques = [];
@@ -170,17 +193,23 @@ export function parseBackup(text) {
 
   const rubIds = new Set(rubriques.map(r => r.id));
   const deckIds = new Set();
-  const folderIds = {};
   const decks = [];
   p.decks.forEach(function (d) {
     if (!d || !isId(d.id) || !isStr(d.name) || !d.name.trim() || !rubIds.has(d.rubriqueId) || deckIds.has(d.id)) return;
     deckIds.add(d.id);
-    const folders = Array.isArray(d.folders)
-      ? d.folders.filter(f => f && isId(f.id) && isStr(f.name) && f.name.trim()).slice(0, 60).map(f => ({ id: f.id, name: f.name.trim().slice(0, 60) }))
-      : [];
-    folderIds[d.id] = new Set(folders.map(f => f.id));
     decks.push(Object.assign({ id: d.id, name: d.name.trim().slice(0, 120), rubriqueId: d.rubriqueId, speakLang: SPEAK_LANGS.some(l => l.code === d.speakLang) ? d.speakLang : '' },
-      folders.length ? { folders } : {}));
+      Number.isFinite(d.order) ? { order: d.order } : {},
+      isId(d.parentId) ? { parentId: d.parentId } : {}));
+  });
+
+  // parentId : doit désigner un autre paquet de la même rubrique, sans boucle ; sinon le paquet remonte à la racine.
+  const byId = new Map(decks.map(d => [d.id, d]));
+  decks.forEach(function (d) {
+    if (!d.parentId) return;
+    const par = byId.get(d.parentId);
+    let ok = !!par && par.id !== d.id && par.rubriqueId === d.rubriqueId;
+    for (let cur = par, n = 0; ok && cur && cur.parentId && n < 60; n++) { cur = byId.get(cur.parentId); if (cur && cur.id === d.id) ok = false; }
+    if (!ok) delete d.parentId;
   });
 
   const cardIds = new Set();
@@ -198,7 +227,6 @@ export function parseBackup(text) {
       front: c.front.trim(),
       back: c.back.trim(),
       ...(cz ? { cloze: cz } : {}),
-      ...(isId(c.folderId) && folderIds[c.deckId] && folderIds[c.deckId].has(c.folderId) ? { folderId: c.folderId } : {}),
       box: Number.isInteger(c.box) ? Math.min(Math.max(c.box, 0), INTERVALS.length - 1) : 0,
       nextReview: isStr(c.nextReview) && /^\d{4}-\d{2}-\d{2}$/.test(c.nextReview) ? c.nextReview : todayStr()
     });

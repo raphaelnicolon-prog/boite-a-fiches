@@ -10,7 +10,7 @@
 //   - match  : course d'appariement, 3 manches de 4 paires à relier
 //   - medley : enchaîne QCM, vrai/faux, phrase à trous et appariement
 
-import { state, shuffle, ensureWeek, todayStr } from './state.js';
+import { state, shuffle, ensureWeek, todayStr, treeCards, rootDeckId } from './state.js';
 import { persist } from './storage.js';
 import { DEMO_PEOPLE, LEAGUE_BOTS, PROMO_BOTS } from './demo.js';
 
@@ -48,8 +48,9 @@ export function stopDuel() {
   state.duel = null;
 }
 
+// Un paquet peut servir de thème s'il a au moins 4 cartes, sous-paquets compris.
 export function eligibleDecks() {
-  return state.decks.filter(d => state.cards.filter(c => c.deckId === d.id).length >= 4);
+  return state.decks.filter(d => treeCards(d.id).length >= 4);
 }
 
 // Lance la mise en relation, puis la partie. 'opponent' = null pour une partie rapide
@@ -63,9 +64,14 @@ export function startDuel(opts) {
     return;
   }
   // Thème : celui demandé, sinon celui choisi dans l'écran Jouer, sinon un paquet au hasard.
-  const wanted = (opts && opts.deckId) || (opts && opts.daily ? null : state.multiDeckId);
-  const deck = (wanted && decks.find(d => d.id === wanted)) || decks[Math.floor(Math.random() * decks.length)];
-  const mode = (opts && opts.mode) || state.multiMode || 'medley';
+  const wanted = opts && opts.deckId;
+  const checked = opts && opts.daily ? null : state.multiThemes;
+  const pool = checked ? decks.filter(d => checked.includes(d.id)) : decks;
+  const candidates = pool.length ? pool : decks;
+  const deck = (wanted && decks.find(d => d.id === wanted)) || candidates[Math.floor(Math.random() * candidates.length)];
+  // Format : celui demandé, sinon un des formats cochés dans l'écran Jouer, tiré au hasard.
+  const modes = state.multiModes && state.multiModes.length ? state.multiModes : ['medley'];
+  const mode = (opts && opts.mode) || modes[Math.floor(Math.random() * modes.length)];
   let opponent = opts && opts.opponent;
   const kind = opponent ? (opts.skipSearch ? 'rematch' : 'friend') : 'quick';
   if (!opponent) {
@@ -119,7 +125,7 @@ function matchQuestion(picked) {
 }
 
 function buildQuestions(deckId, mode) {
-  const deckCards = state.cards.filter(c => c.deckId === deckId);
+  const deckCards = treeCards(deckId);
   const cards = shuffle(deckCards);
   if (mode === 'vf') return cards.slice(0, 6).map(c => vfQuestion(c, deckCards));
   if (mode === 'qcm') return cards.slice(0, 5).map(c => qcmQuestion(c, deckCards));
