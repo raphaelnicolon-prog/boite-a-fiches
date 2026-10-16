@@ -112,6 +112,13 @@ function sendToTrash(type, name, payload) {
   });
 }
 
+// Écarte les cartes dont le recto existe déjà dans le paquet courant : on peut
+// ré-importer une liste mise à jour chaque semaine sans doublons.
+function newBulkCards(cards) {
+  const have = new Set(cardsOf(state.currentDeckId).map(c => normalize(c.front)));
+  return cards.filter(c => { const k = normalize(c.front); if (have.has(k)) return false; have.add(k); return true; });
+}
+
 window.App = {
   // ---- Objectif quotidien ----
   setGoal(n) {
@@ -675,14 +682,18 @@ window.App = {
   // Pas de refresh() ici : il effacerait le texte en cours de saisie.
   previewBulk(text) {
     const { cards, skipped } = parseBulk(text);
+    const fresh = newBulkCards(cards);
+    const dup = cards.length - fresh.length;
     const el = document.getElementById('bulk-preview');
     if (!el) return;
     el.textContent = cards.length === 0 && skipped === 0
       ? 'Rien à ajouter pour l’instant.'
-      : cards.length + ' carte(s) détectée(s)' + (skipped ? ' — ' + skipped + ' ligne(s) ignorée(s) (il manque le « ; » ou un des deux côtés)' : '') + '.';
+      : fresh.length + ' carte(s) à ajouter'
+        + (dup ? ' — ' + dup + ' déjà dans le paquet (ignorée(s))' : '')
+        + (skipped ? ' — ' + skipped + ' ligne(s) ignorée(s) (il manque le « ; » ou un des deux côtés)' : '') + '.';
   },
   saveBulk() {
-    const { cards } = parseBulk(document.getElementById('bulk-text').value);
+    const cards = newBulkCards(parseBulk(document.getElementById('bulk-text').value).cards);
     if (cards.length === 0) return;
     const stamp = Date.now();
     cards.forEach((c, i) => {
