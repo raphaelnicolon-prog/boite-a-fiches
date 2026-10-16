@@ -378,16 +378,23 @@ textarea.answer-input { font-family: inherit; resize: vertical; }
 .mooc-note { font-size: 11px; color: var(--ink-soft); margin: 6px 4px 0; opacity: .8; }
 
 /* ---------- Newsletter ---------- */
-.news-head { margin: 2px 0 6px; }
-.news-title { font-size: 17px; font-weight: 700; }
-.news-edition { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
-.news-item { padding: 13px 0; border-top: 1px solid var(--border); cursor: pointer; }
-.news-meta { font-size: 11px; color: var(--ink-soft); }
-.news-tag { font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
-.news-headline { font-size: 15.5px; font-weight: 600; line-height: 1.3; margin-top: 4px; }
-.news-sum { font-size: 13px; color: var(--ink-soft); line-height: 1.45; margin-top: 3px; }
-.news-body { font-size: 13.5px; line-height: 1.6; margin-top: 10px; }
-.news-source { font-size: 11.5px; font-style: italic; color: var(--ink-soft); margin-top: 8px; }
+.news { background: var(--card); border-radius: 16px; overflow: hidden; margin-top: 26px; }
+.news-mast { padding: 18px 18px 16px; border-bottom: 1px solid var(--border); }
+.news-kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--primary); }
+.news-title { font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 22px; font-weight: 800; line-height: 1.15; margin-top: 6px; }
+.news-edition { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; }
+.news-item { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px; cursor: pointer; }
+.news-item + .news-item { border-top: 1px solid var(--border); }
+.news-item:active { background: rgba(255, 255, 255, 0.04); }
+.news-main { flex: 1; min-width: 0; }
+.news-meta { display: flex; align-items: center; gap: 10px; }
+.news-tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); background: rgba(53, 205, 191, 0.12); padding: 3px 8px; border-radius: 99px; }
+.news-time { font-size: 11.5px; color: var(--ink-soft); }
+.news-headline { font-size: 16px; font-weight: 700; line-height: 1.3; margin-top: 9px; }
+.news-sum { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.news-body { font-size: 14px; line-height: 1.65; margin-top: 10px; }
+.news-source { font-size: 11.5px; font-style: italic; color: var(--ink-soft); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.news-chev { font-size: 16px; color: var(--ink-soft); flex-shrink: 0; margin-top: 4px; }
 
 /* ---------- Listes déroulantes à cocher ---------- */
 .dd { background: var(--card); border-radius: 14px; margin: 0 0 12px; overflow: hidden; width: 100%; }

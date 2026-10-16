@@ -1160,20 +1160,21 @@ function articleFeed() {
 function articlesHtml() {
   const feed = articleFeed();
   const hasLang = feed.some(f => f.a.tags.includes('langues'));
-  let html = '<div class="section-label">Newsletter</div><div class="news-head"><div class="news-title">Apprendre efficacement</div>'
-    + '<div class="news-edition">Édition du ' + editionDate() + ' · ' + (hasLang ? 'sélection d\'après tes révisions de langues' : 'sélection d\'après tes révisions') + '</div></div>';
-  html += feed.map(function (f, rank) {
+  let html = '<div class="news"><div class="news-mast"><div class="news-kicker">Newsletter · ' + editionDate() + '</div>'
+    + '<div class="news-title">Apprendre efficacement</div>'
+    + '<div class="news-edition">' + (hasLang ? 'Sélection d\'après tes révisions de langues' : 'Sélection d\'après tes révisions') + '</div></div>';
+  html += feed.map(function (f) {
     const a = f.a;
     const open = state.openArticle === f.i;
-    const when = new Date(Date.now() - (rank * 2 + 1) * 86400000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-    return '<article class="news-item' + (open ? ' open' : '') + '" onclick="App.toggleArticle(' + f.i + ')">'
-      + '<div class="news-meta"><span class="news-tag">' + esc(a.tag) + '</span> · ' + when + ' · ' + a.time + ' de lecture</div>'
+    return '<article class="news-item' + (open ? ' open' : '') + '" onclick="App.toggleArticle(' + f.i + ')"><div class="news-main">'
+      + '<div class="news-meta"><span class="news-tag">' + esc(a.tag) + '</span><span class="news-time">' + a.time + ' de lecture</span></div>'
       + '<div class="news-headline">' + esc(a.title) + '</div>'
-      + '<div class="news-sum">' + esc(a.summary) + '</div>'
-      + (open ? '<div class="news-body">' + esc(a.body) + '<div class="news-source">Source : ' + esc(a.source) + '</div></div>' : '')
-      + '</article>';
+      + (open
+        ? '<div class="news-body">' + esc(a.body) + '</div><div class="news-source">Source : ' + esc(a.source) + '</div>'
+        : '<div class="news-sum">' + esc(a.summary) + '</div>')
+      + '</div><span class="news-chev">' + (open ? '⌃' : '⌄') + '</span></article>';
   }).join('');
-  html += '<div class="rub-meta" style="margin-top:10px;">Sélection de démonstration : dans la version complète, les articles viendront de sources externes.</div>';
+  html += '</div><div class="rub-meta" style="margin-top:10px;">Sélection de démonstration : dans la version complète, les articles viendront de sources externes.</div>';
   return html;
 }
 
