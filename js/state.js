@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '38';
+export const APP_VERSION = '39';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -66,6 +66,9 @@ export const state = {
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
   createRubriqueId: null, // rubrique choisie dans l'onglet « Créer »
+  deckScope: {},         // section choisie par paquet : { idDuPaquet: 'all' | 'none' | idSection } (non sauvegardé)
+  showFolder: false,
+  editingFolderId: null,
   multiDeckId: 'random', // thème des duels : 'random' ou l'id d'un paquet
   multiMode: 'medley',  // format des duels : 'medley', 'qcm', 'vf' ou 'match'
   leagueScope: 'general', // cercle du classement : 'general', 'amis' ou 'promo'
@@ -180,6 +183,20 @@ export function decksOf(rid) {
 }
 export function cardsOf(did) {
   return state.cards.filter(c => c.deckId === did);
+}
+// Cartes d'un paquet restreintes à la section choisie dans l'écran du paquet
+// ('all' = tout le paquet, 'none' = cartes sans section, sinon l'id d'une section).
+export function scopedCards(did) {
+  const f = state.deckScope[did] || 'all';
+  const all = cardsOf(did);
+  if (f === 'all') return all;
+  const d = state.decks.find(x => x.id === did);
+  const ids = new Set(((d && d.folders) || []).map(x => x.id));
+  return f === 'none' ? all.filter(c => !c.folderId || !ids.has(c.folderId)) : all.filter(c => c.folderId === f);
+}
+export function scopedDue(did) {
+  const t = todayStr();
+  return scopedCards(did).filter(c => c.nextReview <= t);
 }
 export function dueCards(did) {
   const t = todayStr();

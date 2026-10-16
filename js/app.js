@@ -3,7 +3,7 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
 import { startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
@@ -72,7 +72,7 @@ function targetCards(target) {
     const ids = state.decks.filter(d => d.rubriqueId === target.slice(2)).map(d => d.id);
     return state.cards.filter(c => ids.includes(c.deckId));
   }
-  return cardsOf(target);
+  return scopedCards(target);
 }
 function targetDue(target) {
   const t = todayStr();
@@ -110,6 +110,14 @@ function sendToTrash(type, name, payload) {
     id: 't-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
     type, name, deletedAt: new Date().toISOString(), payload
   });
+}
+
+// Range une carte dans une section (valeur du menu déroulant) ; '' ou inconnue = « sans section ».
+function setCardFolder(card, value) {
+  if (value === undefined) return;
+  const d = state.decks.find(x => x.id === card.deckId);
+  if (value && d && (d.folders || []).some(f => f.id === value)) card.folderId = value;
+  else delete card.folderId;
 }
 
 // Écarte les cartes dont le recto existe déjà dans le paquet courant : on peut
@@ -266,8 +274,10 @@ window.App = {
     else state.decks.push({ id: deckId, name: res.title, rubriqueId: a.rubriqueId, speakLang: res.speakLang });
     a.selected.slice().sort((x, y) => x - y).forEach((i, k) => {
       const c = res.cards[i];
-      state.cards.push(Object.assign({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() },
-        c.cloze ? { cloze: { text: c.cloze.text, answer: c.cloze.answer } } : {}));
+      const nc = Object.assign({ id: 'c-' + stamp + '-' + k, deckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() },
+        c.cloze ? { cloze: { text: c.cloze.text, answer: c.cloze.answer } } : {});
+      if (existing) setCardFolder(nc, state.deckScope[deckId]);
+      state.cards.push(nc);
     });
     state.currentRubriqueId = a.rubriqueId;
     state.ai = null;
@@ -457,13 +467,17 @@ window.App = {
   saveCard() {
     const front = document.getElementById('card-front').value.trim();
     const back = document.getElementById('card-back').value.trim();
+    const folderEl = document.getElementById('card-folder');
+    const folderSel = folderEl ? folderEl.value : undefined;
     if (!front || !back) return;
     if (state.editingCardId) {
       // On ne touche qu'au texte : le niveau de maîtrise (box) et la date de rappel restent.
       const c = state.cards.find(x => x.id === state.editingCardId);
-      if (c) { c.front = front; c.back = back; if (c.cloze && c.cloze.auto) delete c.cloze; }
+      if (c) { c.front = front; c.back = back; if (c.cloze && c.cloze.auto) delete c.cloze; setCardFolder(c, folderSel); }
     } else {
-      state.cards.push({ id: 'c-' + Date.now(), deckId: state.currentDeckId, front, back, box: 0, nextReview: todayStr() });
+      const nc = { id: 'c-' + Date.now(), deckId: state.currentDeckId, front, back, box: 0, nextReview: todayStr() };
+      setCardFolder(nc, folderSel);
+      state.cards.push(nc);
     }
     state.showAddCard = false; state.showEditCard = false; state.editingCardId = null;
     persist(); refresh();
@@ -694,10 +708,14 @@ window.App = {
   },
   saveBulk() {
     const cards = newBulkCards(parseBulk(document.getElementById('bulk-text').value).cards);
+    const folderEl = document.getElementById('bulk-folder');
+    const folderSel = folderEl ? folderEl.value : undefined;
     if (cards.length === 0) return;
     const stamp = Date.now();
     cards.forEach((c, i) => {
-      state.cards.push({ id: 'c-' + stamp + '-' + i, deckId: state.currentDeckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() });
+      const nc = { id: 'c-' + stamp + '-' + i, deckId: state.currentDeckId, front: c.front, back: c.back, box: 0, nextReview: todayStr() };
+      setCardFolder(nc, folderSel);
+      state.cards.push(nc);
     });
     state.showBulk = false;
     persist(); refresh();
@@ -751,20 +769,59 @@ window.App = {
     state.showAddRubrique = false; state.showEditRubrique = false; state.editingRubriqueId = null;
     state.showAddDeck = false; state.showEditDeck = false; state.editingDeckId = null;
     state.showAddCard = false; state.showEditCard = false; state.editingCardId = null;
-    state.showBulk = false;
+    state.showBulk = false; state.showFolder = false; state.editingFolderId = null;
     refresh();
+  },
+
+  // ---- Sections d'un paquet (comme des dossiers) ----
+  setScope(deckId, id) { state.deckScope[deckId] = id; refresh(); },
+  openAddFolder() { state.editingFolderId = null; state.showFolder = true; refresh(); },
+  openEditFolder(id) { state.editingFolderId = id; state.showFolder = true; refresh(); },
+  saveFolder() {
+    const name = document.getElementById('folder-name').value.trim().slice(0, 60);
+    const d = state.decks.find(x => x.id === state.currentDeckId);
+    if (!name || !d) return;
+    d.folders = d.folders || [];
+    if (state.editingFolderId) {
+      const f = d.folders.find(x => x.id === state.editingFolderId);
+      if (f) f.name = name;
+    } else {
+      const f = { id: 'f-' + Date.now(), name };
+      d.folders.push(f);
+      state.deckScope[d.id] = f.id; // on se place dans la section qu'on vient de créer
+    }
+    state.showFolder = false; state.editingFolderId = null;
+    persist(); refresh();
+  },
+  deleteFolder(id) {
+    const d = state.decks.find(x => x.id === state.currentDeckId);
+    const f = d && (d.folders || []).find(x => x.id === id);
+    if (!f) return;
+    const n = state.cards.filter(c => c.deckId === d.id && c.folderId === id).length;
+    askConfirm({
+      title: 'Supprimer la section ?',
+      body: '« ' + f.name + ' » sera supprimée. ' + (n ? 'Ses ' + n + ' carte(s) ne sont pas supprimées : elles passent dans « Sans section ».' : 'Elle est vide.'),
+      label: 'Supprimer', danger: true,
+      onConfirm() {
+        state.cards.forEach(c => { if (c.deckId === d.id && c.folderId === id) delete c.folderId; });
+        d.folders = d.folders.filter(x => x.id !== id);
+        if (!d.folders.length) delete d.folders;
+        if (state.deckScope[d.id] === id) state.deckScope[d.id] = 'all';
+        persist(); refresh();
+      }
+    });
   },
 
   // ---- Démarrage d'une session ----
   startFlash(deckId, rubriqueId, scope) {
-    const pool = scope === 'all-due' ? allDueCards() : dueCards(deckId);
+    const pool = scope === 'all-due' ? allDueCards() : scopedDue(deckId);
     const s = { mode: 'flash', deckId, deckName: deckId ? (state.decks.find(d => d.id === deckId) || {}).name : 'Session mixte', queue: shuffle(pool), index: 0, reviewedCount: 0 };
     prepareCurrentCard(s);
     state.session = s; state.view = 'session'; refresh();
   },
   startMode(mode, deckId) {
     const deck = state.decks.find(d => d.id === deckId);
-    const pool = shuffle(dueCards(deckId).length ? dueCards(deckId) : cardsOf(deckId));
+    const pool = shuffle(scopedDue(deckId).length ? scopedDue(deckId) : scopedCards(deckId));
     if (mode === 'texte') ensureAutoCloze(pool);
     let s;
     if (mode === 'appariement') {

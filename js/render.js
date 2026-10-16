@@ -4,7 +4,7 @@
 
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
-  allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, normalize,
+  scopedCards, scopedDue, allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, normalize,
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
   weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak, APP_VERSION
 } from './state.js';
@@ -45,6 +45,7 @@ export function render() {
   if (state.showAddCard) app.insertAdjacentHTML('beforeend', renderCardModal(null));
   if (state.showEditCard) app.insertAdjacentHTML('beforeend', renderCardModal(state.editingCardId));
   if (state.showBulk) app.insertAdjacentHTML('beforeend', renderBulkModal());
+  if (state.showFolder) app.insertAdjacentHTML('beforeend', renderFolderModal());
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
   if (state.showFeedback) app.insertAdjacentHTML('beforeend', renderFeedbackModal());
@@ -272,15 +273,31 @@ function addCardsBlock(d) {
     + '</div>';
 }
 
+// Choix de la section (comme un dossier) dont on veut réviser les cartes.
+function scopeChips(d) {
+  const fs = d.folders || [];
+  if (!fs.length) return '';
+  const cur = state.deckScope[d.id] || 'all';
+  const all = cardsOf(d.id);
+  const ids = new Set(fs.map(f => f.id));
+  const chip = (id, label, n) => '<button class="chip wide' + (cur === id ? ' sel' : '') + '" onclick="App.setScope(\'' + d.id + '\',\'' + id + '\')">' + label + ' · ' + n + '</button>';
+  let h = '<div class="chip-row" style="margin:2px 0 16px;">' + chip('all', 'Tout', all.length);
+  fs.forEach(f => { h += chip(f.id, esc(f.name), all.filter(c => c.folderId === f.id).length); });
+  const none = all.filter(c => !c.folderId || !ids.has(c.folderId)).length;
+  if (none) h += chip('none', 'Sans section', none);
+  return h + '</div>';
+}
+
 function renderModes() {
   const d = state.decks.find(x => x.id === state.currentDeckId);
   if (!d) return renderHome();
   const r = state.rubriques.find(x => x.id === d.rubriqueId);
-  const total = cardsOf(d.id).length;
-  const due = dueCards(d.id).length;
+  const total = scopedCards(d.id).length;
+  const due = scopedDue(d.id).length;
   let html = '<button class="backbtn" onclick="App.openRubrique(\'' + r.id + '\')">‹ ' + esc(r.name) + '</button>';
   html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Choisis ton mode</h1>';
-  html += '<div class="subtitle">' + (total === 0 ? 'Ajoute des cartes pour commencer.' : (due > 0 ? due + ' à revoir aujourd\'hui · ' : 'Rien à revoir aujourd\'hui · ') + pl(total, 'carte')) + '</div>';
+  html += '<div class="subtitle">' + (total === 0 ? 'Aucune carte ici : ajoutes-en pour commencer.' : (due > 0 ? due + ' à revoir aujourd\'hui · ' : 'Rien à revoir aujourd\'hui · ') + pl(total, 'carte')) + '</div>';
+  html += scopeChips(d);
   MODES.forEach(function (m) {
     const enough = total >= m.min;
     html += '<div class="mode-card" style="opacity:' + (enough ? 1 : .45) + ';" onclick="' + (enough ? ('App.startMode(\'' + m.id + '\',\'' + d.id + '\')') : '') + '">'
@@ -291,7 +308,7 @@ function renderModes() {
   html += '<div class="mode-card medley" style="opacity:' + (enoughMedley ? 1 : .45) + ';" onclick="' + (enoughMedley ? ('App.openMedleyScope(\'' + d.id + '\')') : '') + '">'
     + '<div><div class="mode-title">✨ Quizz Medley</div><div class="mode-desc">Mélange de tous les modes disponibles</div></div><span class="chev">›</span></div>';
   html += addCardsBlock(d);
-  html += '<button class="manage-link" onclick="App.openCards(\'' + d.id + '\')">Voir et modifier les cartes (' + total + ')</button>';
+  html += '<button class="manage-link" onclick="App.openCards(\'' + d.id + '\')">Cartes et sections (' + cardsOf(d.id).length + ')</button>';
   return html;
 }
 
@@ -300,20 +317,50 @@ function renderCards() {
   const d = state.decks.find(x => x.id === state.currentDeckId);
   if (!d) return renderHome();
   const cards = cardsOf(d.id);
-  let html = '<button class="backbtn" onclick="App.openDeck(\'' + d.id + '\')">‹ ' + esc(d.name) + '</button>';
-  html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Tes cartes</h1>';
-  html += '<div class="subtitle">' + pl(cards.length, 'carte') + '</div>';
-  html += addCardsBlock(d);
-  if (cards.length) html += '<div style="margin:4px 0 16px;"><button class="link" onclick="App.shareDeck()">📤 Partager ce paquet avec un camarade</button></div>';
-  if (cards.length) html += '<div class="section-label">Les cartes du paquet</div>';
-  cards.forEach(function (c) {
-    html += '<div class="list-item"><div class="row between" style="align-items:flex-start;">'
+  const fs = d.folders || [];
+  const fids = new Set(fs.map(f => f.id));
+  const cardRow = function (c) {
+    return '<div class="list-item"><div class="row between" style="align-items:flex-start;">'
       + '<div style="min-width:0;"><div class="rub-name">' + esc(c.front) + '</div><div class="rub-meta">' + esc(c.back) + '</div></div>'
       + '<div class="row card-actions">'
       + '<button class="hidebtn" onclick="App.openEditCard(\'' + c.id + '\')">modifier</button>'
       + '<button class="hidebtn" onclick="App.deleteCard(\'' + c.id + '\')">supprimer</button>'
       + '</div></div></div>';
+  };
+  let html = '<button class="backbtn" onclick="App.openDeck(\'' + d.id + '\')">‹ ' + esc(d.name) + '</button>';
+  html += '<div class="eyebrow">' + esc(d.name) + '</div><h1 class="title">Tes cartes</h1>';
+  html += '<div class="subtitle">' + pl(cards.length, 'carte') + (fs.length ? ' · ' + pl(fs.length, 'section') : '') + '</div>';
+
+  // Sections : des dossiers pour classer les cartes d'un même paquet (ex. vocabulaire / règles).
+  html += '<div class="section-label">Sections</div>';
+  fs.forEach(function (f) {
+    const n = cards.filter(c => c.folderId === f.id).length;
+    html += '<div class="list-item"><div class="row between"><div style="min-width:0;"><div class="rub-name">' + esc(f.name) + '</div><div class="rub-meta">' + pl(n, 'carte') + '</div></div>'
+      + '<div class="row card-actions"><button class="hidebtn" onclick="App.openEditFolder(\'' + f.id + '\')">renommer</button>'
+      + '<button class="hidebtn" onclick="App.deleteFolder(\'' + f.id + '\')">supprimer</button></div></div></div>';
   });
+  html += '<button class="add-row" style="margin-top:' + (fs.length ? 10 : 0) + 'px;" onclick="App.openAddFolder()">+ Nouvelle section</button>';
+  if (!fs.length) html += '<div class="rub-meta" style="margin-top:8px;">Exemple : « Vocabulaire », « Règles », « Séance 1 »… Tu pourras réviser une section à la fois, ou tout mélanger.</div>';
+
+  html += addCardsBlock(d);
+  if (cards.length) html += '<div style="margin:4px 0 16px;"><button class="link" onclick="App.shareDeck()">Partager ce paquet avec un camarade</button></div>';
+
+  if (!fs.length) {
+    if (cards.length) html += '<div class="section-label">Les cartes du paquet</div>';
+    cards.forEach(c => { html += cardRow(c); });
+    return html;
+  }
+  fs.forEach(function (f) {
+    const list = cards.filter(c => c.folderId === f.id);
+    if (!list.length) return;
+    html += '<div class="section-label">' + esc(f.name) + ' · ' + list.length + '</div>';
+    list.forEach(c => { html += cardRow(c); });
+  });
+  const loose = cards.filter(c => !c.folderId || !fids.has(c.folderId));
+  if (loose.length) {
+    html += '<div class="section-label">Sans section · ' + loose.length + '</div>';
+    loose.forEach(c => { html += cardRow(c); });
+  }
   return html;
 }
 
@@ -470,12 +517,34 @@ function renderDeckModal(editId) {
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveDeck()">' + (editing ? 'Enregistrer' : 'Créer') + '</button></div>'
     + '</div></div>';
 }
+// Menu « Section » (seulement si le paquet en a). current = id de la section présélectionnée.
+function folderSelect(id, current) {
+  const d = state.decks.find(x => x.id === state.currentDeckId);
+  const fs = (d && d.folders) || [];
+  if (!fs.length) return '';
+  return '<label>Section</label><select id="' + id + '"><option value="">Sans section</option>'
+    + fs.map(f => '<option value="' + f.id + '"' + (f.id === current ? ' selected' : '') + '>' + esc(f.name) + '</option>').join('') + '</select>';
+}
+function currentFolderId() {
+  const f = state.deckScope[state.currentDeckId];
+  return f && f !== 'all' && f !== 'none' ? f : '';
+}
+function renderFolderModal() {
+  const d = state.decks.find(x => x.id === state.currentDeckId);
+  const editing = state.editingFolderId && d ? (d.folders || []).find(x => x.id === state.editingFolderId) : null;
+  return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeModals()"><div class="modal">'
+    + '<div class="eyebrow">' + (editing ? 'Renommer la section' : 'Nouvelle section') + '</div>'
+    + '<label>Nom</label><input id="folder-name" placeholder="ex: Vocabulaire du voyage" value="' + (editing ? esc(editing.name) : '') + '"/>'
+    + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveFolder()">' + (editing ? 'Enregistrer' : 'Créer') + '</button></div>'
+    + '</div></div>';
+}
 function renderCardModal(editId) {
   const editing = editId ? state.cards.find(x => x.id === editId) : null;
   return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeModals()"><div class="modal">'
     + '<div class="eyebrow">' + (editing ? 'Modifier la carte' : 'Nouvelle carte') + '</div>'
     + '<label>Recto (question / mot)</label><textarea id="card-front" placeholder="ex: Qu\'est-ce que le SECI model ?">' + (editing ? esc(editing.front) : '') + '</textarea>'
     + '<label>Verso (réponse / traduction)</label><textarea id="card-back" placeholder="Réponse...">' + (editing ? esc(editing.back) : '') + '</textarea>'
+    + folderSelect('card-folder', editing ? editing.folderId : currentFolderId())
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveCard()">Enregistrer</button></div>'
     + '</div></div>';
 }
@@ -485,6 +554,7 @@ function renderBulkModal() {
     + '<div class="rub-meta" style="margin-top:8px;">Une carte par ligne, sous la forme <b>recto ; verso</b>. Tu peux aussi coller directement deux colonnes copiées depuis Excel ou Google Sheets.</div>'
     + '<label>Tes cartes</label><label class="link file-link">Importer un fichier .csv ou .txt<input type="file" accept=".csv,.tsv,.txt,text/plain,text/csv" style="display:none;" onchange="App.loadBulkFile(this)"/></label><textarea id="bulk-text" style="min-height:150px;" placeholder="Buongiorno ; Bonjour&#10;Grazie mille ; Merci beaucoup&#10;Arrivederci ; Au revoir" oninput="App.previewBulk(this.value)"></textarea>'
     + '<div class="rub-meta" id="bulk-preview" style="margin-top:8px;">Rien à ajouter pour l\'instant.</div>'
+    + folderSelect('bulk-folder', currentFolderId())
     + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveBulk()">Ajouter</button></div>'
     + '</div></div>';
 }
@@ -606,15 +676,15 @@ function recommendations(limit, keep) {
 }
 
 function moocCard(r) {
-  return '<a class="mooc" href="' + esc(r.url) + '" target="_blank" rel="noopener sponsored">'
-    + '<div class="mooc-top"><span class="mooc-prov">' + esc(r.provider) + '</span><span class="mooc-tag">Lien partenaire</span></div>'
-    + '<div class="mooc-title">' + esc(r.title) + '</div><div class="mooc-desc">' + esc(r.desc) + '</div>'
-    + '<div class="mooc-foot"><span class="mooc-why">' + esc(r.why) + '</span><span class="mooc-cta">Voir les cours ›</span></div></a>';
+  return '<a class="mooc" href="' + esc(r.url) + '" target="_blank" rel="noopener sponsored"><div style="min-width:0;">'
+    + '<div class="mooc-prov">' + esc(r.provider) + '</div><div class="mooc-title">' + esc(r.title) + '</div>'
+    + '<div class="mooc-why">' + esc(r.why) + '</div></div><span class="chev">›</span></a>';
 }
 
 function moocSection(list, label) {
   if (!list.length) return '';
-  return '<div class="section-label" style="margin-top:26px;">' + label + '</div>' + list.map(moocCard).join('');
+  return '<div class="section-label" style="margin-top:26px;">' + label + '</div><div class="mooc-list">' + list.map(moocCard).join('') + '</div>'
+    + '<div class="mooc-note">Liens partenaires</div>';
 }
 
 // Dans une rubrique : cours liés aux paquets de cette rubrique.
@@ -1028,7 +1098,7 @@ function articleFeed() {
   return ARTICLES.map(function (a, i) {
     const score = (a.tags.includes('langues') ? (hasLang ? 3 : -1) : 1) + ((i + day) % ARTICLES.length) / 100;
     return { a, i, score };
-  }).sort((x, y) => y.score - x.score).slice(0, 5);
+  }).sort((x, y) => y.score - x.score).slice(0, 4);
 }
 
 function articlesHtml() {
@@ -1040,12 +1110,12 @@ function articlesHtml() {
     const a = f.a;
     const open = state.openArticle === f.i;
     const when = new Date(Date.now() - (rank * 2 + 1) * 86400000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-    return '<article class="news-item' + (open ? ' open' : '') + (rank === 0 ? ' lead' : '') + '" onclick="App.toggleArticle(' + f.i + ')">'
+    return '<article class="news-item' + (open ? ' open' : '') + '" onclick="App.toggleArticle(' + f.i + ')">'
       + '<div class="news-meta"><span class="news-tag">' + esc(a.tag) + '</span> · ' + when + ' · ' + a.time + ' de lecture</div>'
       + '<div class="news-headline">' + esc(a.title) + '</div>'
       + '<div class="news-sum">' + esc(a.summary) + '</div>'
       + (open ? '<div class="news-body">' + esc(a.body) + '<div class="news-source">Source : ' + esc(a.source) + '</div></div>' : '')
-      + '<div class="news-more">' + (open ? 'Réduire' : 'Lire l\'article') + ' ›</div></article>';
+      + '</article>';
   }).join('');
   html += '<div class="rub-meta" style="margin-top:10px;">Sélection de démonstration : dans la version complète, les articles viendront de sources externes.</div>';
   return html;

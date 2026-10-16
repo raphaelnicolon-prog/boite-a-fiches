@@ -170,11 +170,17 @@ export function parseBackup(text) {
 
   const rubIds = new Set(rubriques.map(r => r.id));
   const deckIds = new Set();
+  const folderIds = {};
   const decks = [];
   p.decks.forEach(function (d) {
     if (!d || !isId(d.id) || !isStr(d.name) || !d.name.trim() || !rubIds.has(d.rubriqueId) || deckIds.has(d.id)) return;
     deckIds.add(d.id);
-    decks.push({ id: d.id, name: d.name.trim().slice(0, 120), rubriqueId: d.rubriqueId, speakLang: SPEAK_LANGS.some(l => l.code === d.speakLang) ? d.speakLang : '' });
+    const folders = Array.isArray(d.folders)
+      ? d.folders.filter(f => f && isId(f.id) && isStr(f.name) && f.name.trim()).slice(0, 60).map(f => ({ id: f.id, name: f.name.trim().slice(0, 60) }))
+      : [];
+    folderIds[d.id] = new Set(folders.map(f => f.id));
+    decks.push(Object.assign({ id: d.id, name: d.name.trim().slice(0, 120), rubriqueId: d.rubriqueId, speakLang: SPEAK_LANGS.some(l => l.code === d.speakLang) ? d.speakLang : '' },
+      folders.length ? { folders } : {}));
   });
 
   const cardIds = new Set();
@@ -192,6 +198,7 @@ export function parseBackup(text) {
       front: c.front.trim(),
       back: c.back.trim(),
       ...(cz ? { cloze: cz } : {}),
+      ...(isId(c.folderId) && folderIds[c.deckId] && folderIds[c.deckId].has(c.folderId) ? { folderId: c.folderId } : {}),
       box: Number.isInteger(c.box) ? Math.min(Math.max(c.box, 0), INTERVALS.length - 1) : 0,
       nextReview: isStr(c.nextReview) && /^\d{4}-\d{2}-\d{2}$/.test(c.nextReview) ? c.nextReview : todayStr()
     });

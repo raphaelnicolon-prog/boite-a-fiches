@@ -368,28 +368,23 @@ textarea.answer-input { font-family: inherit; resize: vertical; }
 }
 
 /* ---------- Cours en ligne recommandés ---------- */
-.mooc { display: block; background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; color: var(--ink); text-decoration: none; }
+.mooc-list { background: var(--card); border-radius: 16px; overflow: hidden; }
+.mooc { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; color: var(--ink); text-decoration: none; }
+.mooc + .mooc { border-top: 1px solid var(--border); }
 .mooc:active { opacity: .7; }
-.mooc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.mooc-prov { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--primary); }
-.mooc-tag { font-size: 10.5px; color: var(--ink-soft); }
-.mooc-title { font-size: 17px; font-weight: 700; margin-top: 6px; }
-.mooc-desc { font-size: 13px; color: var(--ink-soft); margin-top: 3px; line-height: 1.4; }
-.mooc-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.mooc-why { font-size: 12px; color: var(--ink-soft); line-height: 1.35; }
-.mooc-cta { font-size: 12.5px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.mooc-prov { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--primary); }
+.mooc-title { font-size: 15.5px; font-weight: 600; margin-top: 2px; }
+.mooc-why { font-size: 12px; color: var(--ink-soft); margin-top: 2px; line-height: 1.35; }
+.mooc-note { font-size: 11px; color: var(--ink-soft); margin: 6px 4px 0; opacity: .8; }
 
 /* ---------- Newsletter ---------- */
-.news-head { margin: 4px 0 12px; }
-.news-title { font-size: 20px; font-weight: 800; letter-spacing: .01em; }
-.news-edition { font-size: 12.5px; color: var(--ink-soft); margin-top: 3px; }
-.news-item { padding: 16px 0; border-top: 1px solid var(--border); cursor: pointer; }
-.news-item:last-of-type { border-bottom: 1px solid var(--border); }
-.news-meta { font-size: 11.5px; color: var(--ink-soft); }
-.news-tag { font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--primary); }
-.news-headline { font-size: 17px; font-weight: 700; line-height: 1.25; margin-top: 6px; }
-.news-item.lead .news-headline { font-size: 21px; }
-.news-sum { font-size: 14px; color: var(--ink-soft); line-height: 1.45; margin-top: 5px; }
-.news-body { font-size: 14px; line-height: 1.6; margin-top: 12px; }
-.news-source { font-size: 12px; font-style: italic; color: var(--ink-soft); margin-top: 10px; }
-.news-more { font-size: 12.5px; font-weight: 700; color: var(--primary); margin-top: 10px; }
+.news-head { margin: 2px 0 6px; }
+.news-title { font-size: 17px; font-weight: 700; }
+.news-edition { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.news-item { padding: 13px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.news-meta { font-size: 11px; color: var(--ink-soft); }
+.news-tag { font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
+.news-headline { font-size: 15.5px; font-weight: 600; line-height: 1.3; margin-top: 4px; }
+.news-sum { font-size: 13px; color: var(--ink-soft); line-height: 1.45; margin-top: 3px; }
+.news-body { font-size: 13.5px; line-height: 1.6; margin-top: 10px; }
+.news-source { font-size: 11.5px; font-style: italic; color: var(--ink-soft); margin-top: 8px; }
