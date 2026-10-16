@@ -207,11 +207,34 @@ export const FACTS = [
 ];
 
 // ---------- Liens partenaires (démonstration) ----------
-export const PARTNERS = {
-  'r-revisions': { title: 'Gestion de projet', desc: 'Cours en ligne pour approfondir', url: 'https://www.coursera.org/search?query=project%20management' },
-  'r-langues': { title: 'Apprendre l\'italien', desc: 'Cours en ligne pour progresser', url: 'https://www.coursera.org/search?query=italian' },
-  _default: { title: 'Cours en ligne', desc: 'Découvrir des cours pour aller plus loin', url: 'https://www.coursera.org/' }
+// ---------- Recommandations de cours en ligne (MOOC) ----------
+// Liens de recherche vers de vraies plateformes : on ne prétend pas connaître un cours précis,
+// on envoie vers les résultats de la plateforme pour le thème que la personne révise.
+export const MOOC_PROVIDERS = {
+  coursera: { name: 'Coursera', url: q => 'https://www.coursera.org/search?query=' + encodeURIComponent(q) },
+  edx: { name: 'edX', url: q => 'https://www.edx.org/search?q=' + encodeURIComponent(q) },
+  futurelearn: { name: 'FutureLearn', url: q => 'https://www.futurelearn.com/search?q=' + encodeURIComponent(q) }
 };
+// Thèmes reconnus d'après le nom d'un paquet (texte normalisé : minuscules, sans accents).
+export const MOOC_TOPICS = [
+  { test: /projet|project/, title: 'Gestion de projet', desc: 'Planification, méthodes agiles et pilotage de projet', query: 'project management', providers: ['coursera', 'edx'] },
+  { test: /knowledge|connaissance/, title: 'Knowledge management', desc: 'Capitaliser et partager les connaissances en organisation', query: 'knowledge management', providers: ['edx', 'coursera'] },
+  { test: /performance|kpi|okr/, title: 'Pilotage de la performance', desc: 'Indicateurs, objectifs et tableaux de bord', query: 'performance management', providers: ['coursera', 'edx'] },
+  { test: /consult|conseil|strateg/, title: 'Conseil et stratégie', desc: 'Analyse stratégique et structuration de problèmes', query: 'business strategy consulting', providers: ['coursera', 'futurelearn'] },
+  { test: /innov|creativ/, title: 'Innovation et créativité', desc: 'Méthodes pour concevoir et piloter l\'innovation', query: 'innovation management', providers: ['edx', 'coursera'] },
+  { test: /market/, title: 'Marketing', desc: 'Stratégie marketing, analyse client et communication', query: 'marketing', providers: ['coursera', 'edx'] },
+  { test: /financ|compta|account/, title: 'Finance et comptabilité', desc: 'Les fondamentaux de la finance d\'entreprise', query: 'corporate finance', providers: ['coursera', 'edx'] },
+  { test: /data|donnee|statist|excel|sql/, title: 'Analyse de données', desc: 'Statistiques et analyse de données pour décider', query: 'data analysis', providers: ['coursera', 'edx'] }
+];
+export const MOOC_LANGS = {
+  'it-IT': { title: 'Langue italienne', query: 'learn italian' },
+  'en-GB': { title: 'Anglais professionnel', query: 'business english' },
+  'es-ES': { title: 'Langue espagnole', query: 'learn spanish' },
+  'de-DE': { title: 'Langue allemande', query: 'learn german' },
+  'pt-PT': { title: 'Langue portugaise', query: 'learn portuguese' },
+  'pl-PL': { title: 'Langue polonaise', query: 'learn polish' }
+};
+export const MOOC_LANG_NAMES = [[/italien|italian/, 'it-IT'], [/anglais|english/, 'en-GB'], [/espagnol|spanish/, 'es-ES'], [/allemand|german/, 'de-DE'], [/portugais|portuguese/, 'pt-PT'], [/polonais|polish/, 'pl-PL']];
 
 // ---------- Jeu de fiches de démonstration ----------
 const REV = {
@@ -318,26 +341,50 @@ export function demoDataset() {
   };
 }
 
-// ---------- « Découvrir » : articles courts sur l'apprentissage (contenu d'exemple) ----------
+// ---------- Newsletter : articles courts sur l'apprentissage (contenu d'exemple) ----------
+// Chaque article s'appuie sur une référence réelle (champ « source »). Le classement affiché
+// dépend de ce que la personne révise (voir articleFeed dans render.js).
 export const ARTICLES = [
-  { emoji: '⏳', title: 'La répétition espacée', time: '2 min',
+  { tag: 'Mémoire', tags: ['methode'], time: '3 min', title: 'La répétition espacée : revoir au bon moment',
     summary: 'Revoir une information juste avant de l\'oublier la grave plus durablement.',
-    body: 'Dès 1885, Hermann Ebbinghaus a décrit la « courbe de l\'oubli » : sans révision, on perd vite une grande partie de ce qu\'on vient d\'apprendre. La répétition espacée consiste à revoir une information à des intervalles de plus en plus longs. C\'est le principe de la boîte de Leitner utilisée dans cette appli : une bonne réponse repousse le prochain rappel (1, 3, 7, 16 puis 30 jours), une mauvaise le ramène à zéro. Résultat : tu révises moins souvent ce que tu sais déjà, et davantage ce qui t\'échappe.' },
-  { emoji: '🧠', title: 'Se tester plutôt que relire', time: '2 min',
+    source: 'Ebbinghaus, 1885 ; Leitner',
+    body: 'Dès 1885, Hermann Ebbinghaus a décrit la « courbe de l\'oubli » : sans révision, on perd vite une grande partie de ce qu\'on vient d\'apprendre. La répétition espacée consiste à revoir une information à des intervalles de plus en plus longs. C\'est le principe de la boîte de Leitner : une bonne réponse repousse le prochain rappel (1, 3, 7, 16 puis 30 jours), une mauvaise le ramène à zéro. Résultat : on révise moins souvent ce que l\'on sait déjà, et davantage ce qui échappe.' },
+  { tag: 'Méthode', tags: ['methode'], time: '3 min', title: 'Se tester plutôt que relire',
     summary: 'Aller chercher une réponse en mémoire la renforce plus que la relecture.',
-    body: 'Relire son cours donne une impression de familiarité, pas la certitude de savoir. Des travaux comme ceux de Roediger et Karpicke (2006) montrent que se tester activement améliore la rétention à long terme : c\'est l\'« effet de test ». Les flashcards, le QCM et le texte à trous reposent tous sur ce mécanisme. Astuce : essaie de répondre avant de retourner la carte, même si tu hésites.' },
-  { emoji: '🌙', title: 'Le sommeil, allié de la mémoire', time: '2 min',
+    source: 'Roediger et Karpicke, 2006',
+    body: 'Relire son cours donne une impression de familiarité, pas la certitude de savoir. Les travaux de Roediger et Karpicke (2006) montrent que se tester activement améliore la rétention à long terme : c\'est l\'« effet de test ». Flashcards, QCM et textes à trous reposent tous sur ce mécanisme. Astuce : essayer de répondre avant de retourner la carte, même en hésitant.' },
+  { tag: 'Méthode', tags: ['methode'], time: '3 min', title: 'Surligner ne suffit pas',
+    summary: 'Parmi les techniques d\'étude les plus répandues, certaines sont les moins efficaces.',
+    source: 'Dunlosky et al., 2013',
+    body: 'Une revue de dix techniques d\'étude publiée en 2013 par John Dunlosky et ses collègues classe le surlignage et la relecture parmi les moins utiles, alors qu\'elles sont très populaires. À l\'inverse, les tests pratiques (se poser des questions) et la pratique espacée obtiennent les meilleures évaluations. En clair : transformer ses notes en questions rapporte davantage que les colorier.' },
+  { tag: 'Planning', tags: ['methode'], time: '3 min', title: 'Étaler plutôt que bachoter',
+    summary: 'À durée égale, répartir les révisions dans le temps donne de meilleurs résultats durables.',
+    source: 'Cepeda et al., 2006',
+    body: 'Une synthèse de Cepeda et ses collègues (2006), portant sur plus de 300 expériences, conclut que répartir les séances dans le temps améliore la rétention à long terme par rapport à une session unique concentrée. Dix minutes par jour pendant deux semaines valent mieux, en général, que deux heures la veille. Le bachotage fonctionne pour demain matin, rarement pour l\'année suivante.' },
+  { tag: 'Langues', tags: ['langues'], time: '3 min', title: 'Dire les mots à voix haute',
+    summary: 'Un mot prononcé est mieux retenu qu\'un mot simplement lu.',
+    source: 'MacLeod et al., 2010',
+    body: 'Les expériences menées par Colin MacLeod et son équipe (2010) décrivent l\'« effet de production » : un mot prononcé à voix haute est mieux mémorisé qu\'un mot lu en silence. Pour une langue étrangère, écouter puis répéter le mot ou la phrase ancre à la fois le sens et la prononciation. Quelques secondes à voix haute suffisent à faire la différence.' },
+  { tag: 'Langues', tags: ['langues'], time: '3 min', title: 'Apprendre le vocabulaire en contexte',
+    summary: 'Un mot se retient mieux quand on l\'a croisé plusieurs fois, dans des phrases différentes.',
+    source: 'Nation, 2001',
+    body: 'Selon les travaux du linguiste Paul Nation, retenir un mot de vocabulaire demande en général de le rencontrer à plusieurs reprises, idéalement dans des phrases variées. Une liste de mots isolés aide à démarrer, mais les phrases à compléter et les exemples d\'usage apprennent surtout comment le mot s\'emploie vraiment. Retenir le mot avec sa phrase, pas seul.' },
+  { tag: 'Sommeil', tags: ['methode'], time: '3 min', title: 'Le sommeil, allié de la mémoire',
     summary: 'Le cerveau consolide ce qu\'il a appris pendant la nuit.',
-    body: 'De nombreuses études suggèrent que le sommeil aide à consolider les souvenirs récents. Réviser en fin de journée, puis dormir, est donc un bon réflexe. À l\'inverse, enchaîner une nuit blanche avant un examen est rarement payant : la fatigue dégrade l\'attention et la récupération des informations.' },
-  { emoji: '🎲', title: 'Mélanger pour mieux retenir', time: '2 min',
-    summary: 'Alterner les thèmes et les types d\'exercices rend l\'apprentissage plus durable.',
-    body: 'L\'« entrelacement » consiste à mélanger des sujets ou des formats au lieu de tout travailler par blocs. La séance semble plus difficile, mais la mémoire à long terme est souvent meilleure. C\'est la logique du Quizz Medley : QCM, vrai/faux, phrases à trous et appariement s\'enchaînent pour solliciter ta mémoire de plusieurs façons.' },
-  { emoji: '🗣️', title: 'La méthode Feynman', time: '2 min',
+    source: 'Diekelmann et Born, 2010',
+    body: 'De nombreuses études, dont la synthèse de Diekelmann et Born (2010), indiquent que le sommeil favorise la consolidation des souvenirs récents. Réviser en fin de journée, puis dormir, est donc un bon réflexe. À l\'inverse, enchaîner une nuit blanche avant un examen est rarement payant : la fatigue dégrade l\'attention et la récupération des informations.' },
+  { tag: 'Méthode', tags: ['methode'], time: '3 min', title: 'Mélanger les thèmes pour mieux retenir',
+    summary: 'Alterner les sujets et les types d\'exercices rend l\'apprentissage plus durable.',
+    source: 'Rohrer et Taylor, 2007',
+    body: 'L\'« entrelacement » consiste à mélanger des sujets ou des formats au lieu de tout travailler par blocs. La séance paraît plus difficile, mais la mémoire à long terme est souvent meilleure, comme l\'ont montré Rohrer et Taylor (2007) sur des exercices de mathématiques. Alterner QCM, vrai/faux, phrases à trous et appariement sollicite la mémoire de plusieurs façons.' },
+  { tag: 'Méthode', tags: ['methode'], time: '3 min', title: 'La technique Feynman',
     summary: 'Expliquer simplement une notion révèle ce qu\'on n\'a pas compris.',
-    body: 'Le principe attribué au physicien Richard Feynman : explique une notion comme à quelqu\'un qui n\'y connaît rien. Là où tu butes, il y a un trou dans ta compréhension. Retourne au cours, comble-le, puis recommence. Les phrases à trous et la lecture audio des mots peuvent t\'aider à passer de la reconnaissance à la production.' },
-  { emoji: '👉', title: 'Les nudges : de petits coups de pouce', time: '2 min',
+    source: 'Principe attribué à Richard Feynman',
+    body: 'Le principe attribué au physicien Richard Feynman : expliquer une notion comme à quelqu\'un qui n\'y connaît rien. Là où l\'on bute, il y a un trou dans la compréhension. On retourne au cours, on le comble, puis on recommence. Les phrases à trous et la lecture à voix haute aident à passer de la reconnaissance à la production.' },
+  { tag: 'Motivation', tags: ['methode'], time: '3 min', title: 'Nudges : de petits coups de pouce',
     summary: 'Orienter un comportement sans rien interdire, c\'est la théorie du « nudge ».',
-    body: 'Popularisé par Thaler et Sunstein (Nudge, 2008), le nudge oriente un choix par un petit changement de contexte, sans contrainte : option par défaut, rappel, preuve sociale, progression visible. Ici : la série de jours, l\'objectif quotidien, le rappel à l\'heure choisie ou la ligue entre amis sont des nudges. Bien conçus, ils aident à tenir une habitude ; mal utilisés, ils peuvent devenir manipulateurs, d\'où l\'importance de rester transparent et de ne jamais culpabiliser.' }
+    source: 'Thaler et Sunstein, 2008',
+    body: 'Popularisé par Richard Thaler et Cass Sunstein (Nudge, 2008), le nudge oriente un choix par un petit changement de contexte, sans contrainte : option par défaut, rappel, preuve sociale, progression visible. Dans les applis d\'apprentissage, la série de jours, l\'objectif quotidien, le rappel à l\'heure choisie ou le classement entre amis en sont des exemples. Bien conçus, ils aident à tenir une habitude ; mal utilisés, ils peuvent devenir manipulateurs.' }
 ];
 
 // ---------- Analyse d'un texte de cours (locale, sans IA) ----------

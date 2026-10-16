@@ -8,7 +8,7 @@ import {
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
   weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak, APP_VERSION
 } from './state.js';
-import { AI_TOPICS, PARTNERS, FACTS, DEMO_PEOPLE, ARTICLES } from './demo.js';
+import { AI_TOPICS, FACTS, DEMO_PEOPLE, ARTICLES, MOOC_PROVIDERS, MOOC_TOPICS, MOOC_LANGS, MOOC_LANG_NAMES } from './demo.js';
 import { todayStr } from './state.js';
 import { leagueTable, POINTS, DUEL_MODES, eligibleDecks } from './duel.js';
 
@@ -214,6 +214,12 @@ function renderHome() {
   });
   html += '</div>';
   html += '<button class="add-row" onclick="App.openAddRubrique()">+ Nouvelle rubrique</button>';
+
+  if (!state.reorderMode) {
+    html += moocSection(recommendations(2), 'Recommandé pour toi');
+    html += '<div class="slim-card tap" style="margin-top:14px;" onclick="App.goTab(\'progress\')"><div style="flex:1;min-width:0;"><div class="mode-title">Newsletter</div>'
+      + '<div class="mode-desc">Édition du ' + editionDate() + ' · ' + pl(articleFeed().length, 'article') + ' sélectionné' + (articleFeed().length > 1 ? 's' : '') + ' pour toi</div></div><span class="chev">›</span></div>';
+  }
 
   if (hiddenRubs.length > 0 && state.reorderMode) {
     html += '<div class="section-label" style="margin-top:14px;">Masquées</div>';
@@ -426,6 +432,7 @@ function renderSessionDone() {
     + '<div class="eyebrow">Session</div><h1 class="title">Bien joué !</h1>'
     + '<div class="subtitle">' + pl(s.reviewedCount || 0, 'carte') + ' révisée' + ((s.reviewedCount || 0) > 1 ? 's' : '') + '.</div>'
     + sessionRecap()
+    + '<div style="width:100%;text-align:left;">' + moocSection(recommendations(1, d => d.id === s.deckId), 'Pour aller plus loin') + '</div>'
     + '<button class="btn" style="margin-top:18px;" onclick="App.backHome()">Retour à l\'accueil</button></div>';
 }
 
@@ -572,12 +579,47 @@ function aiButton(r) {
     + '<span class="mode-desc">' + aiQuotaText() + '</span></span><span class="chev">›</span></button>';
 }
 
+// ---------- RECOMMANDATIONS DE COURS (MOOC) ----------
+// Choisit des cours en ligne d'après ce que la personne révise vraiment : les paquets qui
+// ont des cartes, les plus « à revoir » d'abord. keep = filtre facultatif sur les paquets.
+function recommendations(limit, keep) {
+  const decks = state.decks.filter(d => cardsOf(d.id).length > 0 && (!keep || keep(d)));
+  decks.sort((a, b) => dueCards(b.id).length - dueCards(a.id).length || cardsOf(b.id).length - cardsOf(a.id).length);
+  const seen = new Set();
+  const out = [];
+  decks.forEach(function (d) {
+    if (out.length >= limit) return;
+    const n = normalize(d.name);
+    const langHit = MOOC_LANG_NAMES.find(l => l[0].test(n));
+    const lang = MOOC_LANGS[d.speakLang] || (langHit && MOOC_LANGS[langHit[1]]);
+    let t = lang ? { title: lang.title, desc: 'Cours de langue en ligne, du débutant au niveau avancé', query: lang.query, providers: ['coursera', 'futurelearn'] }
+      : MOOC_TOPICS.find(x => x.test.test(n));
+    if (!t) t = { title: d.name, desc: 'Cours en ligne sur ce thème', query: d.name, providers: ['coursera', 'edx'] };
+    if (seen.has(t.title)) return;
+    seen.add(t.title);
+    const prov = MOOC_PROVIDERS[t.providers[out.length % t.providers.length]];
+    const due = dueCards(d.id).length;
+    out.push({ provider: prov.name, title: t.title, desc: t.desc, url: prov.url(t.query),
+      why: 'Parce que tu révises « ' + d.name + ' »' + (due ? ' · ' + pl(due, 'carte') + ' à revoir' : '') });
+  });
+  return out;
+}
+
+function moocCard(r) {
+  return '<a class="mooc" href="' + esc(r.url) + '" target="_blank" rel="noopener sponsored">'
+    + '<div class="mooc-top"><span class="mooc-prov">' + esc(r.provider) + '</span><span class="mooc-tag">Lien partenaire</span></div>'
+    + '<div class="mooc-title">' + esc(r.title) + '</div><div class="mooc-desc">' + esc(r.desc) + '</div>'
+    + '<div class="mooc-foot"><span class="mooc-why">' + esc(r.why) + '</span><span class="mooc-cta">Voir les cours ›</span></div></a>';
+}
+
+function moocSection(list, label) {
+  if (!list.length) return '';
+  return '<div class="section-label" style="margin-top:26px;">' + label + '</div>' + list.map(moocCard).join('');
+}
+
+// Dans une rubrique : cours liés aux paquets de cette rubrique.
 function partnerCard(r) {
-  const p = PARTNERS[r.id] || PARTNERS._default;
-  return '<div class="eyebrow" style="margin:22px 0 8px;">Pour aller plus loin</div>'
-    + '<a class="partner-card" href="' + esc(p.url) + '" target="_blank" rel="noopener sponsored">'
-    + '<span class="settings-ic">🎓</span><span class="settings-txt"><span class="mode-title">' + esc(p.title) + '</span>'
-    + '<span class="mode-desc">' + esc(p.desc) + ' · lien partenaire (démo)</span></span><span class="chev">›</span></a>';
+  return moocSection(recommendations(2, d => d.rubriqueId === r.id), 'Pour aller plus loin');
 }
 
 function renderAi() {
@@ -965,19 +1007,48 @@ function renderStats() {
 
   html += '<div class="section-label">Le saviez-vous ?</div><div class="fact-card" style="margin-top:0;"><div class="rub-meta" style="font-size:13px;line-height:1.5;margin:0;">'
     + esc(FACTS[Math.floor(Date.now() / 86400000) % FACTS.length]) + '</div></div>';
-  html += '<div class="section-label">À lire</div>' + articlesHtml();
+  html += articlesHtml();
   return html;
 }
 
-// Articles courts sur l'apprentissage (accordéon) : contenu d'exemple, à terme une vraie lettre d'information.
-function articlesHtml() {
+// ---------- NEWSLETTER ----------
+function editionDate() {
+  return new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+}
+
+// Classe les articles d'après ce que la personne révise : les articles de langues remontent
+// si elle a des paquets de langue. À score égal, l'ordre tourne chaque jour (édition qui « vit »).
+function articleFeed() {
+  const hasLang = state.decks.some(function (d) {
+    if (!cardsOf(d.id).length) return false;
+    const n = normalize(d.name);
+    return !!d.speakLang || d.rubriqueId === 'r-langues' || MOOC_LANG_NAMES.some(l => l[0].test(n));
+  });
+  const day = Math.floor(Date.now() / 86400000);
   return ARTICLES.map(function (a, i) {
-    const open = state.openArticle === i;
-    return '<div class="article' + (open ? ' open' : '') + '" onclick="App.toggleArticle(' + i + ')"><div class="row between"><div class="row" style="min-width:0;"><span class="settings-ic">' + a.emoji + '</span>'
-      + '<div style="min-width:0;"><div class="mode-title">' + esc(a.title) + '</div><div class="mode-desc">' + esc(a.summary) + '</div></div></div>'
-      + '<span class="chev">' + (open ? '⌃' : '⌄') + '</span></div>'
-      + (open ? '<div class="article-body">' + esc(a.body) + '<div class="rub-meta" style="margin-top:8px;">Lecture : ' + a.time + '</div></div>' : '') + '</div>';
+    const score = (a.tags.includes('langues') ? (hasLang ? 3 : -1) : 1) + ((i + day) % ARTICLES.length) / 100;
+    return { a, i, score };
+  }).sort((x, y) => y.score - x.score).slice(0, 5);
+}
+
+function articlesHtml() {
+  const feed = articleFeed();
+  const hasLang = feed.some(f => f.a.tags.includes('langues'));
+  let html = '<div class="section-label">Newsletter</div><div class="news-head"><div class="news-title">Apprendre efficacement</div>'
+    + '<div class="news-edition">Édition du ' + editionDate() + ' · ' + (hasLang ? 'sélection d\'après tes révisions de langues' : 'sélection d\'après tes révisions') + '</div></div>';
+  html += feed.map(function (f, rank) {
+    const a = f.a;
+    const open = state.openArticle === f.i;
+    const when = new Date(Date.now() - (rank * 2 + 1) * 86400000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    return '<article class="news-item' + (open ? ' open' : '') + (rank === 0 ? ' lead' : '') + '" onclick="App.toggleArticle(' + f.i + ')">'
+      + '<div class="news-meta"><span class="news-tag">' + esc(a.tag) + '</span> · ' + when + ' · ' + a.time + ' de lecture</div>'
+      + '<div class="news-headline">' + esc(a.title) + '</div>'
+      + '<div class="news-sum">' + esc(a.summary) + '</div>'
+      + (open ? '<div class="news-body">' + esc(a.body) + '<div class="news-source">Source : ' + esc(a.source) + '</div></div>' : '')
+      + '<div class="news-more">' + (open ? 'Réduire' : 'Lire l\'article') + ' ›</div></article>';
   }).join('');
+  html += '<div class="rub-meta" style="margin-top:10px;">Sélection de démonstration : dans la version complète, les articles viendront de sources externes.</div>';
+  return html;
 }
 
 // ---------- DÉCOUVRIR (articles) ----------
