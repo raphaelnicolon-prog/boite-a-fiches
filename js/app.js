@@ -7,7 +7,7 @@ import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, ro
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze, MOOC_TOPICS } from './demo.js';
 import { eligibleDecks, startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
-import { render, friendResultsHtml, searchResultsHtml } from './render.js';
+import { render, friendResultsHtml, searchResultsHtml, themeRowsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
 
 function refresh() {
@@ -575,6 +575,24 @@ window.App = {
     refresh();
   },
   allMultiThemes() { state.multiThemes = null; refresh(); },
+  // Coche / décoche tous les paquets jouables d'une rubrique d'un coup.
+  toggleMultiRubrique(rid) {
+    const ok = eligibleDecks().map(d => d.id);
+    const ids = allDecksOf(rid).map(d => d.id).filter(id => ok.includes(id));
+    if (!ids.length) return;
+    const cur = new Set(state.multiThemes || ok);
+    const full = ids.every(id => cur.has(id));
+    ids.forEach(id => { if (full) cur.delete(id); else cur.add(id); });
+    if (cur.size === 0) return;
+    state.multiThemes = cur.size === ok.length ? null : ok.filter(id => cur.has(id));
+    refresh();
+  },
+  // Pas de refresh() complet : il ferait perdre le focus de la barre de recherche.
+  searchThemes(q) {
+    state.themeQuery = q;
+    const el = document.getElementById('theme-rows');
+    if (el) el.innerHTML = themeRowsHtml(q);
+  },
 
   // ---- Cartes ----
   openCards() { state.view = 'cards'; refresh(); },

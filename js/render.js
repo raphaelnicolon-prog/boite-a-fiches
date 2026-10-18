@@ -63,16 +63,18 @@ export function render() {
 function tabIcon(inner) {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>';
 }
+// Épées croisées (icône « swords » de la bibliothèque Lucide, licence ISC).
+const SWORDS = '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/>';
 const TAB_ICONS = {
   learn: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
-  play: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  play: SWORDS,
   create: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   progress: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   profile: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'
 };
 function renderTabBar() {
   const cur = TAB_OF_VIEW[state.view] || 'learn';
-  const labels = { learn: 'Réviser', play: 'Jouer', create: 'Créer', progress: 'Progrès', profile: 'Profil' };
+  const labels = { learn: 'Réviser', play: 'Arène', create: 'Créer', progress: 'Progrès', profile: 'Profil' };
   return '<nav class="tabbar" aria-label="Navigation principale">' + ['learn', 'play', 'create', 'progress', 'profile'].map(function (t) {
     const on = cur === t;
     if (t === 'create') {
@@ -114,12 +116,14 @@ function settingsRow(icon, title, desc, onclick) {
 }
 // Liste déroulante à cocher : un en-tête (titre + résumé) qui s'ouvre sur des lignes avec case.
 // items = [{ id, label, count, depth, state: 'on' | 'part' | 'off' }] ; call(item) = code JS exécuté au clic.
-function dropdown(key, title, summary, items, call, allCall) {
+function dropdown(key, title, summary, items, call, allCall, panelHtml) {
   const open = state.dropOpen === key;
   let h = '<div class="dd' + (open ? ' open' : '') + '"><button class="dd-head" onclick="App.toggleDrop(\'' + key + '\')">'
     + '<span class="dd-text"><span class="dd-title">' + title + '</span><span class="dd-val">' + summary + '</span></span>'
     + '<span class="dd-chev">' + (open ? '⌃' : '⌄') + '</span></button>';
-  if (open) {
+  if (open && panelHtml) {
+    h += '<div class="dd-panel">' + panelHtml + '</div>';
+  } else if (open) {
     h += '<div class="dd-panel">';
     if (allCall) h += '<button class="dd-row dd-all" onclick="' + allCall + '"><span class="dd-box on">✓</span><span class="dd-label">Tout cocher</span></button>';
     h += items.map(function (it) {
@@ -902,49 +906,84 @@ function avatar(name, big) {
   return '<div class="badge" style="' + size + 'background:hsl(' + h + ',48%,42%);">' + esc(name.charAt(0).toUpperCase()) + '</div>';
 }
 
-// En-tête commun aux trois écrans de l'onglet « Jouer » : un sélecteur remplace trois écrans séparés.
-function playHeader(active) {
-  const tabs = [['multi', 'Duels'], ['league', 'Classement'], ['friends', 'Amis']];
-  return '<div class="eyebrow">Multijoueur</div><h1 class="title">Jouer</h1>'
+// En-tête commun aux trois écrans de l'onglet « Arène » : un sélecteur remplace trois écrans séparés.
+function playHeader(active, noTitle) {
+  const tabs = [['multi', 'Arène'], ['league', 'Ligue'], ['friends', 'Amis']];
+  return (noTitle ? '' : '<div class="arena-head"><span class="arena-sw">' + tabIcon(SWORDS) + '</span><div><h1 class="title arena-title">L\'Arène</h1><div class="arena-tag">Défie, gagne, grimpe.</div></div></div>')
     + '<div class="seg-tabs">' + tabs.map(function (t) {
       return '<button class="seg-tab' + (t[0] === active ? ' on' : '') + '" onclick="App.goPlay(\'' + t[0] + '\')">' + t[1] + '</button>';
     }).join('') + '</div>';
 }
 
+// Bandeau de combat : toi à gauche, l'adversaire à droite, « VS » au centre.
+// right = { mode: 'idle' | 'search' | 'found', av: html, name, sub }
+function arenaBanner(right, stats) {
+  const lv = playerLevel();
+  return '<div class="arena arena-' + right.mode + '"><div class="arena-row">'
+    + '<div class="fighter me"><div class="fighter-av">' + esc(state.profile.avatar) + '</div><div class="fighter-name">' + esc(state.profile.pseudo) + '</div><div class="fighter-sub">Niveau ' + lv.level + '</div></div>'
+    + '<div class="vs"><span class="vs-ring">' + tabIcon(SWORDS) + '</span><b>VS</b></div>'
+    + '<div class="fighter opp"><div class="fighter-av">' + right.av + '</div><div class="fighter-name">' + esc(right.name) + '</div><div class="fighter-sub">' + esc(right.sub) + '</div></div>'
+    + '</div>' + (stats || '') + '</div>';
+}
+
+// Lignes de la liste des thèmes : groupées par rubrique, filtrables par le texte de la barre de recherche.
+export function themeRowsHtml(query) {
+  const q = normalize(query || '');
+  const ok = new Set(eligibleDecks().map(d => d.id));
+  const checked = state.multiThemes ? new Set(state.multiThemes.filter(id => ok.has(id))) : ok;
+  let html = '';
+  state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order).forEach(function (r) {
+    const rows = [];
+    decksOf(r.id).forEach(function (d0) {
+      treeNodes(d0.id).forEach(function (n) {
+        if (!ok.has(n.id)) return;
+        const node = state.decks.find(x => x.id === n.id);
+        if (q && !normalize(deckPath(n.id)).includes(q)) return;
+        const ids = descendantIds(n.id).filter(x => ok.has(x));
+        const k = ids.filter(x => checked.has(x)).length;
+        rows.push('<button class="dd-row" style="padding-left:' + (14 + n.depth * 18) + 'px;" onclick="App.toggleMultiTheme(\'' + n.id + '\')">'
+          + '<span class="dd-box ' + (k === ids.length ? 'on' : k === 0 ? 'off' : 'part') + '">' + (k === ids.length ? '✓' : k === 0 ? '' : '–') + '</span>'
+          + '<span class="dd-label">' + esc(node.name) + '</span><span class="dd-count">' + pl(treeCards(n.id).length, 'carte') + '</span></button>');
+      });
+    });
+    if (!rows.length) return;
+    const rids = allDecksOf(r.id).map(d => d.id).filter(id => ok.has(id));
+    const kk = rids.filter(x => checked.has(x)).length;
+    html += '<button class="dd-group" onclick="App.toggleMultiRubrique(\'' + r.id + '\')">'
+      + '<span class="dd-box ' + (kk === rids.length ? 'on' : kk === 0 ? 'off' : 'part') + '">' + (kk === rids.length ? '✓' : kk === 0 ? '' : '–') + '</span>'
+      + '<span class="dd-label">' + esc(r.name) + '</span><span class="dd-count">' + kk + ' / ' + rids.length + '</span></button>' + rows.join('');
+  });
+  return html || '<div class="rub-meta" style="padding:14px;">Aucun paquet ne correspond à « ' + esc(query) + ' ».</div>';
+}
+
 function renderMulti() {
   ensureWeek();
-  const lv = playerLevel();
   const m = state.multi;
   const dailyDone = state.meta.dailyDone === todayStr();
   let html = playHeader('multi');
-  html += '<div class="slim-card tap" onclick="App.openProfile()">' + meAvatar()
-    + '<div style="flex:1;min-width:0;"><div class="mode-title">' + esc(state.profile.pseudo) + ' · niveau ' + lv.level + '</div>'
-    + '<div class="mode-desc">' + m.weekPoints + ' pts cette semaine · ' + pl(m.wins, 'victoire') + ' sur ' + pl(m.played, 'duel') + '</div></div></div>';
 
   const fm = state.multiModes;
   const formatItems = DUEL_MODES.map(x => ({ id: x.id, label: x.label, state: fm.includes(x.id) ? 'on' : 'off' }));
   const formatSummary = fm.length === DUEL_MODES.length ? 'Tous les formats' : DUEL_MODES.filter(x => fm.includes(x.id)).map(x => x.label).join(', ');
-  html += dropdown('formats', 'Format de partie', esc(formatSummary), formatItems, it => 'App.toggleMultiMode(\'' + it.id + '\')', '');
-
   const ok = new Set(eligibleDecks().map(d => d.id));
   const checked = state.multiThemes ? new Set(state.multiThemes.filter(id => ok.has(id))) : ok;
-  const themeItems = [];
-  state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order).forEach(function (r) {
-    decksOf(r.id).forEach(function (d0) {
-      treeNodes(d0.id).forEach(function (n) {
-        if (!ok.has(n.id)) return;
-        const ids = descendantIds(n.id).filter(x => ok.has(x));
-        const k = ids.filter(x => checked.has(x)).length;
-        themeItems.push({ id: n.id, depth: n.depth, label: state.decks.find(x => x.id === n.id).name, count: treeCards(n.id).length, state: k === ids.length ? 'on' : k === 0 ? 'off' : 'part' });
-      });
-    });
-  });
-  const themeSummary = checked.size === ok.size ? 'Tous les paquets (au hasard)' : (checked.size === 1 ? esc(state.decks.find(x => x.id === [...checked][0]).name) : checked.size + ' paquets');
-  html += dropdown('themes', 'Thèmes', themeSummary, themeItems, it => 'App.toggleMultiTheme(\'' + it.id + '\')', checked.size === ok.size ? '' : 'App.allMultiThemes()');
-  html += '<button class="mode-card medley" style="width:100%;border:none;text-align:left;cursor:pointer;margin-top:14px;" onclick="App.quickMatch()">'
-    + '<div><div class="mode-title">⚡ Partie rapide</div><div class="mode-desc">Adversaire au hasard · ' + esc(formatSummary) + ' · ' + esc(themeSummary) + '</div></div><span class="chev">›</span></button>';
-  html += '<div class="mode-card" style="cursor:pointer;" onclick="App.dailyChallenge()"><div><div class="mode-title">🎯 Défi du jour' + (dailyDone ? ' ✓' : '') + '</div>'
-    + '<div class="mode-desc">' + (dailyDone ? 'Relevé aujourd\'hui · reviens demain' : 'Un Medley express · +20 points bonus') + '</div></div><span class="chev">›</span></div>';
+  const themeSummary = checked.size === ok.size ? 'Tous les paquets' : (checked.size === 1 ? esc(state.decks.find(x => x.id === [...checked][0]).name) : checked.size + ' paquets');
+
+  const stats = '<div class="arena-stats"><div><b>' + m.weekPoints + '</b><span>pts cette semaine</span></div><div><b>' + m.wins + '</b><span>' + (m.wins > 1 ? 'victoires' : 'victoire') + '</span></div><div><b>' + m.played + '</b><span>' + (m.played > 1 ? 'duels' : 'duel') + '</span></div></div>';
+  html += arenaBanner({ mode: 'idle', av: '?', name: 'Adversaire', sub: 'à tirer au sort' }, stats);
+  html += '<button class="arena-cta" onclick="App.quickMatch()"><span class="arena-cta-t">' + tabIcon(SWORDS) + 'Entrer dans l\'arène</span>'
+    + '<span class="arena-cta-s">' + esc(formatSummary) + ' · ' + themeSummary + '</span></button>';
+
+  html += '<div class="section-label">Préparer le combat</div>';
+  html += dropdown('formats', 'Format du duel', esc(formatSummary), formatItems, it => 'App.toggleMultiMode(\'' + it.id + '\')', '');
+  const panel = '<div class="dd-search"><input id="theme-search" placeholder="Rechercher un paquet…" value="' + esc(state.themeQuery) + '" oninput="App.searchThemes(this.value)" autocomplete="off" autocapitalize="off"/></div>'
+    + (checked.size === ok.size ? '' : '<button class="dd-row dd-all" onclick="App.allMultiThemes()"><span class="dd-box on">✓</span><span class="dd-label">Tout cocher</span></button>')
+    + '<div id="theme-rows">' + themeRowsHtml(state.themeQuery) + '</div>';
+  html += dropdown('themes', 'Champ de bataille', themeSummary, [], null, '', panel);
+
+  html += '<div class="quest" onclick="App.dailyChallenge()"><span class="quest-ic">' + tabIcon('<path d="M12 2l2.6 6.3L21 9l-5 4.4L17.5 20 12 16.6 6.5 20 8 13.4 3 9l6.4-.7z"/>') + '</span><div style="flex:1;min-width:0;">'
+    + '<div class="quest-k">Défi du jour' + (dailyDone ? ' · relevé' : '') + '</div><div class="mode-title">' + (dailyDone ? 'Reviens demain' : 'Un Medley express') + '</div>'
+    + '<div class="mode-desc">' + (dailyDone ? 'Le prochain défi t\'attend demain.' : '+20 points de bonus pour la ligue') + '</div></div><span class="chev">›</span></div>';
   html += '<div class="rub-meta" style="margin-top:14px;">Prototype : adversaires et classement simulés.</div>';
   return html;
 }
@@ -958,29 +997,34 @@ function renderDuel() {
     return back + '<h1 class="title">Pas assez de cartes</h1><div class="subtitle">Il faut un paquet d\'au moins 4 cartes pour lancer un duel.</div>';
   }
   const opp = d.opponent;
+  const fmtLabel = (DUEL_MODES.find(x => x.id === d.mode) || DUEL_MODES[0]).label;
+  const oppAv = esc(opp ? opp.name.charAt(0).toUpperCase() : '?');
   if (d.phase === 'search') {
-    return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.kind === 'friend' ? 'Défi' : 'Partie rapide') + '</div>'
-      + '<h1 class="title">' + (d.kind === 'friend' ? 'Invitation envoyée à ' + esc(opp.name) + '…' : 'Recherche d\'un adversaire…') + '</h1>'
-      + '<div class="spinner" style="margin-top:26px;"></div><div class="subtitle" style="margin-top:20px;">Thème : ' + esc(d.deckName) + '</div>'
+    return '<div class="arena-screen"><div class="arena-kicker">' + (d.kind === 'friend' ? 'Défi lancé' : 'Matchmaking') + '</div>'
+      + '<h1 class="title arena-big">' + (d.kind === 'friend' ? 'En attente de ' + esc(opp.name) : 'Recherche d\'un adversaire') + '</h1>'
+      + arenaBanner({ mode: 'search', av: d.kind === 'friend' ? oppAv : '?', name: d.kind === 'friend' ? opp.name : 'Adversaire', sub: d.kind === 'friend' ? 'invitation envoyée' : 'recherche…' })
+      + '<div class="arena-chips"><span>' + esc(fmtLabel) + '</span><span>' + esc(d.deckName) + '</span></div>'
       + '<button class="link" onclick="App.openMulti()">Annuler</button></div>';
   }
   if (d.phase === 'found') {
-    return '<div class="center" style="padding-top:50px;"><div class="eyebrow">' + (d.daily ? 'Défi du jour' : d.kind === 'friend' ? opp.name + ' a accepté' : 'Adversaire trouvé') + '</div>'
-      + avatar(opp.name, true) + '<h1 class="title" style="margin-top:14px;">' + esc(opp.name) + '</h1>'
-      + '<div class="subtitle">Niveau ' + opp.level + ' · en ligne · ' + esc((DUEL_MODES.find(x => x.id === d.mode) || DUEL_MODES[0]).label) + ' · thème : ' + esc(d.deckName) + '</div><div class="spinner"></div>'
-      + '<div class="hint">Le duel commence…</div></div>';
+    return '<div class="arena-screen"><div class="arena-kicker">' + (d.daily ? 'Défi du jour' : d.kind === 'friend' ? esc(opp.name) + ' a accepté' : 'Adversaire trouvé') + '</div>'
+      + '<h1 class="title arena-big">Prépare-toi !</h1>'
+      + arenaBanner({ mode: 'found', av: oppAv, name: opp.name, sub: 'Niveau ' + opp.level })
+      + '<div class="arena-chips"><span>' + esc(fmtLabel) + '</span><span>' + esc(d.deckName) + '</span></div>'
+      + '<div class="arena-go">Le combat commence…</div></div>';
   }
   if (d.phase === 'end') {
     const r = d.result;
-    const title = r.outcome === 'win' ? 'Victoire 🎉' : r.outcome === 'loss' ? 'Défaite…' : 'Égalité';
-    return '<div class="center" style="padding-top:30px;"><div class="eyebrow">Résultat</div><h1 class="title">' + title + '</h1>'
-      + '<div class="duel-final"><div><div class="duel-name">' + esc(state.profile.pseudo) + '</div><div class="duel-score">' + d.me.score + '</div></div>'
-      + '<div class="duel-vs">vs</div><div><div class="duel-name">' + esc(opp.name) + '</div><div class="duel-score">' + d.opp.score + '</div></div></div>'
-      + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue' + (r.dailyBonus ? ' (dont ' + r.dailyBonus + ' de bonus du défi 🎯)' : '') + '</div>'
-      + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement cette semaine' + (r.rank <= 5 ? ' · dans la zone des lots 🎁' : '') + '</div></div>'
-      + '<div class="row" style="margin-top:18px;"><button class="btn" onclick="App.duelRematch()">Revanche</button>'
+    const title = r.outcome === 'win' ? 'Victoire' : r.outcome === 'loss' ? 'Défaite' : 'Égalité';
+    return '<div class="arena-screen"><div class="arena-kicker">Résultat du duel</div>'
+      + '<h1 class="title arena-result ' + r.outcome + '">' + title + '</h1>'
+      + '<div class="duel-final"><div class="duel-me"><div class="duel-name">' + esc(state.profile.pseudo) + '</div><div class="duel-score">' + d.me.score + '</div></div>'
+      + '<div class="duel-vs">VS</div><div class="duel-opp"><div class="duel-name">' + esc(opp.name) + '</div><div class="duel-score">' + d.opp.score + '</div></div></div>'
+      + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue' + (r.dailyBonus ? ' (dont ' + r.dailyBonus + ' de bonus du défi)' : '') + '</div>'
+      + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement cette semaine' + (r.rank <= 5 ? ' · dans la zone des lots' : '') + '</div></div>'
+      + '<div class="row" style="margin-top:18px;"><button class="btn arena-btn" onclick="App.duelRematch()">Revanche</button>'
       + '<button class="btn ghost" onclick="App.openLeague()">Classement</button></div>'
-      + '<button class="link" style="margin-top:18px;" onclick="App.openMulti()">Retour au multijoueur</button></div>';
+      + '<button class="link" style="margin-top:18px;" onclick="App.openMulti()">Retour à l\'arène</button></div>';
   }
 
   // question / reveal

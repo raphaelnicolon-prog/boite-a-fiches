@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '45';
+export const APP_VERSION = '46';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -71,6 +71,7 @@ export const state = {
   newDeckParentId: null, // paquet dans lequel on crée un sous-paquet (null = directement dans la rubrique)
   dropOpen: null,        // liste déroulante ouverte (voir dropdown() dans render.js)
   medleyModes: ['flash', 'qcm', 'texte', 'appariement'], // modes mélangés dans le Quizz Medley
+  themeQuery: '',        // recherche dans la liste des thèmes du multijoueur
   multiThemes: null,     // thèmes des duels cochés : null = tous, sinon liste d'ids de paquets
   multiModes: ['medley', 'qcm', 'vf', 'match'], // formats de duel cochés (un est tiré au hasard)
   leagueScope: 'general', // cercle du classement : 'general', 'amis' ou 'promo'
