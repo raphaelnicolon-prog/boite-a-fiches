@@ -405,7 +405,11 @@ export const ARTICLES = [
   { tag: 'Méthode', tags: ['etudes', 'methode'], time: '3 min', title: 'Apprendre en expliquant à quelqu\'un',
     summary: 'Se préparer à enseigner une notion aide à mieux la comprendre et à mieux la retenir.',
     source: 'Fiorella et Mayer, 2013',
-    body: 'Des expériences de Logan Fiorella et Richard Mayer (2013) montrent que les étudiants qui se préparent à enseigner un contenu, puis l\'expliquent, obtiennent de meilleurs résultats ensuite que ceux qui se contentent de le relire. Réviser à plusieurs, c\'est donc une bonne occasion de s\'interroger à tour de rôle : le duel et le défi entre amis ont la même logique, avec un peu de compétition en plus.' }
+    body: 'Des expériences de Logan Fiorella et Richard Mayer (2013) montrent que les étudiants qui se préparent à enseigner un contenu, puis l\'expliquent, obtiennent de meilleurs résultats ensuite que ceux qui se contentent de le relire. Réviser à plusieurs, c\'est donc une bonne occasion de s\'interroger à tour de rôle : le duel et le défi entre amis ont la même logique, avec un peu de compétition en plus.' },
+  { tag: 'Habitude', tags: ['actifs', 'methode'], time: '3 min', title: 'Apprendre quand on a peu de temps : décider du quand et du où',
+    summary: 'Un plan simple « quand, où, comment » rend un projet d\'apprentissage bien plus facile à tenir.',
+    source: 'Gollwitzer, 1999',
+    body: 'Le psychologue Peter Gollwitzer (1999) a décrit les « intentions d\'implémentation » : des plans de la forme « quand telle situation arrive, je fais telle action ». Plutôt que de se promettre d\'apprendre « dès que possible », on décide à l\'avance : « dans le train du matin, dix cartes de vocabulaire ». Pour une personne qui travaille, c\'est souvent ce qui sépare une bonne résolution d\'une vraie habitude, surtout avec des sessions courtes et régulières.' }
 ];
 
 // ---------- Analyse d'un texte de cours (locale, sans IA) ----------

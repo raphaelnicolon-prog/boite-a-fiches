@@ -5,7 +5,7 @@
 // Tant qu'on n'a pas ajouté de compte + synchronisation en ligne, tes fiches
 // créées sur ton téléphone ne se voient pas automatiquement sur ton ordinateur.
 
-import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS } from './state.js';
+import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS } from './state.js';
 
 const STORAGE_KEY = 'boite-fiches-data-v1';
 
@@ -47,13 +47,20 @@ export function sanitizeMeta(raw) {
 }
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export function sanitizeProfile(raw) {
-  const p = { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '', study: { level: '', year: '', field: '', degree: '', exam: '' }, courses: [] };
+  const p = { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '', status: '', study: { level: '', year: '', field: '', other: '', degree: '', exam: '' }, work: { sector: '', other: '', job: '', goal: '' }, courses: [] };
   if (!raw || typeof raw !== 'object') return p;
   if (typeof raw.pseudo === 'string' && raw.pseudo.trim().length >= 2 && raw.pseudo.trim().length <= 16) p.pseudo = raw.pseudo.trim();
   if (typeof raw.avatar === 'string' && raw.avatar.trim().length > 0 && raw.avatar.trim().length <= 8) p.avatar = raw.avatar.trim();
   if (typeof raw.email === 'string' && EMAIL_RE.test(raw.email.trim()) && raw.email.trim().length <= 80) p.email = raw.email.trim();
   if (typeof raw.createdAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.createdAt)) p.createdAt = raw.createdAt;
+  if (STATUSES.some(x => x.id === raw.status)) p.status = raw.status;
+  const wk = raw.work && typeof raw.work === 'object' ? raw.work : {};
+  if (WORK_SECTORS.some(x => x.id === wk.sector)) p.work.sector = wk.sector;
+  if (typeof wk.other === 'string') p.work.other = wk.other.trim().slice(0, 60);
+  if (typeof wk.job === 'string') p.work.job = wk.job.trim().slice(0, 60);
+  if (WORK_GOALS.some(x => x.id === wk.goal)) p.work.goal = wk.goal;
   const st = raw.study && typeof raw.study === 'object' ? raw.study : {};
+  if (typeof st.other === 'string') p.study.other = st.other.trim().slice(0, 60);
   const lvl = STUDY_LEVELS.find(l => l.id === st.level);
   if (lvl) { p.study.level = lvl.id; if (lvl.years.includes(st.year)) p.study.year = st.year; }
   if (STUDY_FIELDS.some(f => f.id === st.field)) p.study.field = st.field;

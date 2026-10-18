@@ -3,7 +3,7 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, courseChoices, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS, courseChoices, detectField, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze, MOOC_TOPICS } from './demo.js';
 import { eligibleDecks, startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
@@ -124,17 +124,24 @@ function sendToTrash(type, name, payload) {
   });
 }
 
+// Écrans du parcours, selon la situation choisie (étudiant, en activité, curieux).
+// studyOnly : seulement le profil d'apprentissage, les sujets et le récapitulatif (depuis l'onglet Profil).
+function onbFlow(o) {
+  const mid = o.status === 'student' ? ['study', 'courses'] : o.status === 'working' ? ['work', 'courses'] : o.status === 'curious' ? ['courses'] : [];
+  return o.studyOnly ? ['status'].concat(mid, ['recap']) : ['welcome', 'account', 'status'].concat(mid, ['goal', 'recap']);
+}
+function onbStep() { const o = state.onboard; return o ? onbFlow(o)[o.i] : ''; }
+function focusLater(id) { setTimeout(() => { const el = document.getElementById(id); if (el) el.focus(); }, 30); }
 // État de départ du parcours d'accueil (rejoué = on part du profil actuel).
-// studyOnly : seulement les écrans « parcours » et « matières », puis le récapitulatif (depuis l'onglet Profil).
 function makeOnboard(replay, studyOnly) {
-  const st = state.profile.study || {};
-  return { flow: studyOnly ? ['study', 'courses', 'recap'] : ['welcome', 'account', 'study', 'courses', 'goal', 'recap'], i: 0, replay, studyOnly: !!studyOnly, error: '',
-    pseudo: state.profile.pseudo !== 'Toi' ? state.profile.pseudo : '', avatar: state.profile.avatar, email: state.profile.email || '',
-    level: st.level || '', year: st.year || '', field: st.field || '', degree: st.degree || '', exam: st.exam || '',
-    courses: (state.profile.courses || []).slice(), goal: state.stats.goal, interests: (state.meta.interests || []).slice(),
+  const p = state.profile, st = p.study || {}, wk = p.work || {};
+  return { i: 0, replay, studyOnly: !!studyOnly, error: '',
+    pseudo: p.pseudo !== 'Toi' ? p.pseudo : '', avatar: p.avatar, email: p.email || '',
+    status: p.status || '', level: st.level || '', year: st.year || '', field: st.field || '', fieldOther: st.other || '', degree: st.degree || '', exam: st.exam || '',
+    sector: wk.sector || '', sectorOther: wk.other || '', job: wk.job || '', workGoal: wk.goal || '',
+    courses: (p.courses || []).slice(), goal: state.stats.goal, interests: (state.meta.interests || []).slice(),
     remind: state.meta.reminder.on, time: state.meta.reminder.time };
 }
-function onbStep() { const o = state.onboard; return o ? o.flow[o.i] : ''; }
 // Recopie dans l'état ce qui a été tapé dans les champs (on ne rafraîchit pas à chaque lettre).
 function syncOnbInputs() {
   const o = state.onboard;
@@ -143,7 +150,10 @@ function syncOnbInputs() {
   const p = g('onb-pseudo'); if (p !== null) o.pseudo = p;
   const e = g('onb-email'); if (e !== null) o.email = e;
   const d = g('onb-degree'); if (d !== null) o.degree = d.slice(0, 60);
+  const j = g('onb-job'); if (j !== null) o.job = j.slice(0, 60);
   const x = g('onb-exam'); if (x !== null) o.exam = /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '';
+  const ot = g('onb-other');
+  if (ot !== null) { if (onbStep() === 'work') o.sectorOther = ot.slice(0, 60); else o.fieldOther = ot.slice(0, 60); }
 }
 
 // Modes à une carte à la fois cochés pour le Medley (l'appariement est géré à part).
@@ -626,21 +636,23 @@ window.App = {
   toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
 
   // ---- Accueil de la première ouverture ----
-  // Parcours d'accueil : présentation, compte, parcours d'études, matières, objectif, récapitulatif.
-  // Le « compte » est un profil enregistré sur l'appareil (aucun serveur dans cette version).
+  // Parcours d'accueil : présentation, compte, profil (étudiant / en activité / curieux), matières ou sujets,
+  // objectif, récapitulatif. Le « compte » est un profil enregistré sur l'appareil (pas de serveur dans cette version).
   startOnboarding() { state.onboard = makeOnboard(true, false); state.view = 'home'; refresh(); window.scrollTo(0, 0); },
-  // Depuis l'onglet Profil : on ne repasse que par le parcours d'études et les matières.
+  // Depuis l'onglet Profil : on ne repasse que par le profil d'apprentissage, les sujets et le récapitulatif.
   editStudy() { state.onboard = makeOnboard(true, true); refresh(); window.scrollTo(0, 0); },
   onbNext() {
     const o = state.onboard;
     if (!o) return;
     syncOnbInputs();
-    if (onbStep() === 'account') {
+    const step = onbStep();
+    if (step === 'account') {
       if (o.pseudo.length < 2 || o.pseudo.length > 16) { o.error = 'Ton pseudo doit faire entre 2 et 16 caractères.'; refresh(); return; }
       if (o.email && !EMAIL_RE.test(o.email)) { o.error = 'Cette adresse e-mail ne semble pas valide (ou laisse le champ vide).'; refresh(); return; }
     }
+    if (step === 'status' && !o.status) { o.error = 'Choisis la situation qui te ressemble le plus.'; refresh(); return; }
     o.error = '';
-    o.i = Math.min(o.i + 1, o.flow.length - 1);
+    o.i = Math.min(o.i + 1, onbFlow(o).length - 1);
     refresh(); window.scrollTo(0, 0);
   },
   onbBack() {
@@ -656,28 +668,31 @@ window.App = {
     o.interests = o.interests.includes(id) ? o.interests.filter(x => x !== id) : o.interests.concat(id);
     refresh();
   },
+  onbStatus(id) {
+    syncOnbInputs();
+    if (STATUSES.some(x => x.id === id)) { state.onboard.status = id; state.onboard.error = ''; refresh(); }
+  },
+  // Listes déroulantes : la valeur est un identifiant sûr (ou un index pour l'année), '' = « Choisir… ».
   onbLevel(id) {
     syncOnbInputs();
     const o = state.onboard, lvl = STUDY_LEVELS.find(l => l.id === id);
-    if (!lvl) return;
-    o.level = o.level === id ? '' : id;
-    if (!lvl.years.includes(o.year) || !o.level) o.year = '';
+    o.level = lvl ? id : '';
+    if (!lvl || !lvl.years.includes(o.year)) o.year = '';
     refresh();
   },
   onbYear(i) {
     syncOnbInputs();
     const o = state.onboard, lvl = STUDY_LEVELS.find(l => l.id === o.level);
-    if (lvl && lvl.years[i]) { o.year = o.year === lvl.years[i] ? '' : lvl.years[i]; refresh(); }
+    o.year = lvl && lvl.years[parseInt(i, 10)] ? lvl.years[parseInt(i, 10)] : '';
+    refresh();
   },
-  onbField(id) {
-    syncOnbInputs();
-    const o = state.onboard;
-    if (STUDY_FIELDS.some(f => f.id === id)) { o.field = o.field === id ? '' : id; refresh(); }
-  },
+  onbField(id) { syncOnbInputs(); state.onboard.field = STUDY_FIELDS.some(f => f.id === id) ? id : ''; refresh(); if (id === 'autre') focusLater('onb-other'); },
+  onbSector(id) { syncOnbInputs(); state.onboard.sector = WORK_SECTORS.some(f => f.id === id) ? id : ''; refresh(); if (id === 'autre') focusLater('onb-other'); },
+  onbWorkGoal(id) { syncOnbInputs(); state.onboard.workGoal = WORK_GOALS.some(g => g.id === id) ? id : ''; refresh(); },
   // Matières : on passe l'index dans la liste affichée, jamais le texte (une apostrophe casserait le onclick).
   onbCourse(i) {
     syncOnbInputs();
-    const o = state.onboard, name = courseChoices(o.field, o.courses)[i];
+    const o = state.onboard, name = courseChoices(o, o.courses)[i];
     if (name === undefined) return;
     if (o.courses.includes(name)) o.courses = o.courses.filter(c => c !== name);
     else if (o.courses.length < 14) o.courses = o.courses.concat(name);
@@ -689,7 +704,7 @@ window.App = {
     const name = el ? el.value.trim().slice(0, 40) : '';
     if (name && !o.courses.some(c => normalize(c) === normalize(name)) && o.courses.length < 14) o.courses = o.courses.concat(name);
     refresh();
-    const again = document.getElementById('onb-course'); if (again) again.focus();
+    focusLater('onb-course');
   },
   onbGoal(n) { if (GOAL_CHOICES.includes(n)) { state.onboard.goal = n; refresh(); } },
   onbRemind() { state.onboard.remind = !state.onboard.remind; refresh(); },
@@ -702,11 +717,18 @@ window.App = {
     const o = state.onboard;
     if (!o) return;
     syncOnbInputs();
+    const first = !o.replay; // première ouverture : les paquets d'exemple viennent d'être créés
     state.profile.pseudo = o.pseudo || state.profile.pseudo;
     state.profile.avatar = o.avatar || state.profile.avatar;
     state.profile.email = o.email || '';
     if (!state.profile.createdAt) state.profile.createdAt = todayStr();
-    state.profile.study = { level: o.level, year: o.year, field: o.field, degree: o.degree.slice(0, 60), exam: o.exam };
+    state.profile.status = o.status;
+    // On n'enregistre que ce qui correspond à la situation choisie (pas de reste d'un ancien choix).
+    const stu = o.status === 'student', wrk = o.status === 'working';
+    state.profile.study = stu ? { level: o.level, year: o.year, field: o.field, other: o.field === 'autre' ? o.fieldOther : '', degree: o.degree.slice(0, 60), exam: o.exam }
+      : { level: '', year: '', field: '', other: '', degree: '', exam: wrk ? o.exam : '' };
+    state.profile.work = wrk ? { sector: o.sector, other: o.sector === 'autre' ? o.sectorOther : '', job: o.job.slice(0, 60), goal: o.workGoal }
+      : { sector: '', other: '', job: '', goal: '' };
     state.profile.courses = o.courses.slice(0, 14);
     state.stats.goal = o.goal;
     state.meta.reminder.on = o.remind; state.meta.reminder.time = o.time;
@@ -717,14 +739,23 @@ window.App = {
       const have = state.decks.some(d => d.rubriqueId === lr.id && (d.speakLang === i.id || normalize(d.name) === normalize(i.label)));
       if (!have) state.decks.push({ id: 'd-' + Date.now() + '-' + i.id.slice(0, 2), name: i.label, rubriqueId: lr.id, speakLang: i.id, order: nextDeckOrder(lr.id, null) });
     });
-    // Chaque matière en cours devient un paquet (vide) dans « Spécial Révisions », prêt à remplir.
-    const rr = state.rubriques.find(r => r.id === 'r-revisions');
+    // Chaque matière (ou sujet) devient un paquet vide. Étudiant : « Spécial Révisions » ; sinon une rubrique « Mes sujets ».
+    let rr = state.rubriques.find(r => r.id === (o.status === 'student' || !o.status ? 'r-revisions' : 'r-sujets'));
+    if (!rr && o.status && o.status !== 'student' && o.courses.length) {
+      rr = { id: 'r-sujets', name: 'Mes sujets', emoji: '🎯', color: 'gold', order: Math.max(-1, ...state.rubriques.map(r => r.order)) + 1, hidden: false, isDefault: false };
+      state.rubriques.push(rr);
+    }
     if (rr) o.courses.forEach(function (c, k) {
       // Déjà un paquet du même sujet (ex. « Gestion de projet » et « Project Management ») : on n'en crée pas un second.
       const topic = MOOC_TOPICS.find(x => x.test.test(normalize(c)));
       const have = state.decks.some(d => d.rubriqueId === rr.id && (normalize(d.name) === normalize(c) || (topic && topic === MOOC_TOPICS.find(x => x.test.test(normalize(d.name))))));
       if (!have) state.decks.push({ id: 'd-' + Date.now() + '-c' + k, name: c, rubriqueId: rr.id, speakLang: '', order: nextDeckOrder(rr.id, null) });
     });
+    // Hors études, les cours d'exemple de « Spécial Révisions » ne servent à rien : on les masque (réversible via Réorganiser).
+    if (first && o.status && o.status !== 'student') {
+      const ex = state.rubriques.find(r => r.id === 'r-revisions');
+      if (ex) ex.hidden = true;
+    }
     const studyOnly = o.studyOnly;
     state.meta.welcomed = true; state.onboard = null;
     persist();

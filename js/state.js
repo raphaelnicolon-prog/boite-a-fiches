@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '43';
+export const APP_VERSION = '45';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -57,7 +57,7 @@ export const state = {
   stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
   meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, interests: [], haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
   onboard: null,           // parcours d'accueil en cours (voir app.js) ; null = pas d'accueil affiché
-  profile: { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '', study: { level: '', year: '', field: '', degree: '', exam: '' }, courses: [] }, // pseudo et avatar affichés dans les duels et le classement
+  profile: { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '', status: '', study: { level: '', year: '', field: '', other: '', degree: '', exam: '' }, work: { sector: '', other: '', job: '', goal: '' }, courses: [] }, // pseudo et avatar affichés dans les duels et le classement
   showProfile: false,
   showFeedback: false,
   feedbackRating: 0,
@@ -255,9 +255,12 @@ export function dueInRubrique(rid) {
   const t = todayStr();
   return state.cards.filter(c => ids.has(c.deckId) && c.nextReview <= t).length;
 }
+// Cartes à revoir aujourd'hui, hors rubriques masquées (une rubrique masquée ne doit pas s'inviter dans « Aujourd'hui »).
 export function allDueCards() {
   const t = todayStr();
-  return state.cards.filter(c => c.nextReview <= t);
+  const hidden = new Set(state.rubriques.filter(r => r.hidden).map(r => r.id));
+  const skip = new Set(state.decks.filter(d => hidden.has(d.rubriqueId)).map(d => d.id));
+  return state.cards.filter(c => c.nextReview <= t && !skip.has(c.deckId));
 }
 export function colorVar(name) {
   return CALM_COLORS[name] || CALM_COLORS.slate;
@@ -309,22 +312,100 @@ export const FIELD_COURSES = {
   arts: ['Histoire de l\'art', 'Design', 'Communication visuelle', 'Photographie', 'Marketing'],
   autre: ['Culture générale', 'Mathématiques', 'Français', 'Histoire-géographie', 'Langues étrangères', 'Économie']
 };
-// Matières proposées : celles du domaine choisi, plus celles ajoutées à la main (même ordre à l'affichage et au clic).
-export function courseChoices(field, selected) {
-  const base = FIELD_COURSES[field || 'autre'] || FIELD_COURSES.autre;
-  return base.concat((selected || []).filter(c => !base.includes(c)));
+// ---- Profil d'apprentissage : étudiant, personne en activité ou simple curieux ----
+export const STATUSES = [
+  { id: 'student', label: 'Étudiant(e)', desc: 'Lycée, prépa, université, école…' },
+  { id: 'working', label: 'En activité', desc: 'Salarié(e), indépendant(e), en reconversion…' },
+  { id: 'curious', label: 'Simple curieux(se)', desc: 'J\'apprends pour le plaisir ou un projet perso' }
+];
+export const WORK_SECTORS = [
+  { id: 'commerce', label: 'Commerce et vente', ph: 'ex : Responsable de magasin, commercial' },
+  { id: 'finance', label: 'Finance et banque', ph: 'ex : Conseiller clientèle, analyste' },
+  { id: 'conseil', label: 'Conseil et services', ph: 'ex : Consultant, chef de projet' },
+  { id: 'sante', label: 'Santé et social', ph: 'ex : Infirmier(ère), éducateur(trice)' },
+  { id: 'tech', label: 'Informatique et numérique', ph: 'ex : Développeur(se), data analyst' },
+  { id: 'industrie', label: 'Industrie et ingénierie', ph: 'ex : Technicien(ne), ingénieur(e)' },
+  { id: 'education', label: 'Éducation et formation', ph: 'ex : Enseignant(e), formateur(trice)' },
+  { id: 'public', label: 'Administration publique', ph: 'ex : Agent territorial, juriste' },
+  { id: 'btp', label: 'Bâtiment et artisanat', ph: 'ex : Artisan, conducteur de travaux' },
+  { id: 'tourisme', label: 'Tourisme et restauration', ph: 'ex : Responsable d\'hôtel, chef de rang' },
+  { id: 'culture', label: 'Culture et communication', ph: 'ex : Graphiste, journaliste, chargé de com.' },
+  { id: 'autre', label: 'Autre', ph: 'ex : Ton poste ou ton métier' }
+];
+export const WORK_GOALS = [
+  { id: 'progresser', label: 'Progresser dans mon métier' },
+  { id: 'changer', label: 'Changer de métier ou me reconvertir' },
+  { id: 'certif', label: 'Préparer une certification ou un concours' },
+  { id: 'langue', label: 'Apprendre ou pratiquer une langue' },
+  { id: 'voyage', label: 'Préparer un voyage ou une expatriation' },
+  { id: 'plaisir', label: 'Apprendre pour le plaisir' }
+];
+export const SECTOR_COURSES = {
+  commerce: ['Négociation commerciale', 'Marketing', 'Gestion de la relation client', 'Vente en ligne', 'Management', 'Anglais professionnel'],
+  finance: ['Finance', 'Comptabilité', 'Réglementation financière', 'Analyse de données', 'Gestion de portefeuille', 'Anglais professionnel'],
+  conseil: ['Gestion de projet', 'Conseil et stratégie', 'Management', 'Prise de parole', 'Analyse de données', 'Anglais professionnel'],
+  sante: ['Anatomie', 'Pharmacologie', 'Santé publique', 'Gestes et protocoles', 'Psychologie', 'Anglais médical'],
+  tech: ['Programmation', 'Cybersécurité', 'Bases de données', 'Intelligence artificielle', 'Gestion de projet', 'Anglais technique'],
+  industrie: ['Qualité et normes', 'Gestion de production', 'Mécanique', 'Électronique', 'Gestion de projet', 'Anglais technique'],
+  education: ['Pédagogie', 'Psychologie de l\'apprentissage', 'Outils numériques', 'Communication', 'Gestion de classe'],
+  public: ['Droit administratif', 'Finances publiques', 'Management public', 'Rédaction administrative'],
+  btp: ['Sécurité sur chantier', 'Lecture de plans', 'Réglementation du bâtiment', 'Gestion de chantier', 'Devis et chiffrage'],
+  tourisme: ['Accueil et relation client', 'Langues étrangères', 'Gestion hôtelière', 'Marketing touristique', 'Œnologie'],
+  culture: ['Communication', 'Design graphique', 'Rédaction web', 'Photographie', 'Réseaux sociaux'],
+  autre: ['Gestion de projet', 'Communication', 'Management', 'Anglais professionnel', 'Bureautique']
+};
+export const CURIOUS_COURSES = ['Histoire', 'Culture générale', 'Sciences', 'Philosophie', 'Musique', 'Art', 'Cuisine', 'Photographie', 'Finance personnelle', 'Informatique', 'Bien-être et santé', 'Développement personnel'];
+// Quand on précise « Autre », on repère des mots-clés pour rattacher le texte à un domaine connu
+// (prototype : une vraie IA lirait et comprendrait la réponse pour aller bien plus loin).
+const DOMAIN_KEYWORDS = [
+  [/archi|urbanis|paysag|genie|meca|elec|aero|auto|industri|robot/, 'ingenierie'],
+  [/info|code|dev|logiciel|data|donn|numeri|web|cyber|ia\b|intelligence/, 'info'],
+  [/droit|juridi|avocat|notaire|police|politique/, 'droit'],
+  [/sante|medec|infirm|pharma|dent|kine|psycho|veterin|biolog/, 'sante'],
+  [/physique|chimie|math|geolog|astronom|environn|ecolog/, 'sciences'],
+  [/lettre|langue|histoire|philo|litter|traduc|journal|edition/, 'lettres'],
+  [/art|design|graph|photo|cinema|musique|mode|theatre|danse/, 'arts'],
+  [/commerce|gestion|marketing|financ|compta|management|entrepr|rh\b|vente|banque/, 'gestion']
+];
+export function detectField(text) {
+  const t = normalize(String(text || ''));
+  if (!t) return '';
+  const hit = DOMAIN_KEYWORDS.find(k => k[0].test(t));
+  return hit ? hit[1] : '';
+}
+// Matières ou sujets proposés selon le profil (même ordre à l'affichage et au clic).
+export function courseBase(c) {
+  if (c.status === 'working') {
+    if (c.sector && c.sector !== 'autre') return SECTOR_COURSES[c.sector];
+    return FIELD_COURSES[detectField(c.sectorOther)] || SECTOR_COURSES.autre;
+  }
+  if (c.status === 'curious') return CURIOUS_COURSES;
+  const f = c.field && c.field !== 'autre' ? c.field : detectField(c.fieldOther) || 'autre';
+  return FIELD_COURSES[f] || FIELD_COURSES.autre;
+}
+export function courseChoices(c, selected) {
+  const base = courseBase(c);
+  return base.concat((selected || []).filter(x => !base.includes(x)));
 }
 export function studySummary() {
-  const s = state.profile.study || {};
+  const p = state.profile, s = p.study || {}, w = p.work || {};
+  if (p.status === 'working') {
+    const sec = WORK_SECTORS.find(x => x.id === w.sector);
+    const goal = WORK_GOALS.find(x => x.id === w.goal);
+    return [w.job, sec && (sec.id === 'autre' ? (w.other || sec.label) : sec.label), goal && goal.label].filter(Boolean).join(' · ');
+  }
+  if (p.status === 'curious') return 'Apprendre pour le plaisir';
   const lvl = STUDY_LEVELS.find(l => l.id === s.level);
   const fld = STUDY_FIELDS.find(f => f.id === s.field);
-  return [s.degree, lvl && (lvl.label + (s.year ? ' · ' + s.year : '')), fld && fld.label].filter(Boolean).join(' · ');
+  return [s.degree, lvl && (lvl.label + (s.year ? ' · ' + s.year : '')), fld && (fld.id === 'autre' ? (s.other || fld.label) : fld.label)].filter(Boolean).join(' · ');
 }
 export function hasStudyProfile() {
-  const s = state.profile.study || {};
-  return !!(s.level || s.field || s.degree || (state.profile.courses || []).length);
+  const p = state.profile, s = p.study || {}, w = p.work || {};
+  return !!(p.status || s.level || s.field || s.degree || w.sector || w.job || (p.courses || []).length);
 }
-// Jours restants avant le prochain examen saisi (null si aucun ou déjà passé).
+// « Examen » pour un étudiant, « Échéance » sinon.
+export function deadlineLabel() { return state.profile.status === 'student' || !state.profile.status ? 'Examen' : 'Échéance'; }
+// Jours restants avant la prochaine échéance saisie (null si aucune ou déjà passée).
 export function examDaysLeft() {
   const e = state.profile.study && state.profile.study.exam;
   if (!e) return null;

@@ -4,7 +4,7 @@
 
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
-  scopedCards, scopedDue, selectedIds, childDecks, treeNodes, treeCards, dueTree, allDecksOf, deckPath, descendantIds, rootDeckId, allDueCards, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, courseChoices, studySummary, hasStudyProfile, examDaysLeft, reviewedToday, currentStreak, normalize,
+  scopedCards, scopedDue, selectedIds, childDecks, treeNodes, treeCards, dueTree, allDecksOf, deckPath, descendantIds, rootDeckId, allDueCards, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS, courseChoices, detectField, deadlineLabel, studySummary, hasStudyProfile, examDaysLeft, reviewedToday, currentStreak, normalize,
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
   weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak, APP_VERSION
 } from './state.js';
@@ -138,7 +138,7 @@ function nextStepHtml() {
   const due = allDueCards().length;
   let n = null;
   if (days !== null && days <= 30) {
-    n = { t: 'Examen ' + (days === 0 ? 'aujourd\'hui' : 'dans ' + pl(days, 'jour')),
+    n = { t: deadlineLabel() + ' ' + (days === 0 ? 'aujourd\'hui' : 'dans ' + pl(days, 'jour')),
       d: due > 0 ? pl(due, 'carte') + ' à revoir : une session par jour suffit pour arriver prêt.' : 'Rien à revoir pour l\'instant. Ajoute des cartes pour t\'entraîner avant le jour J.',
       go: due > 0 ? 'App.startFlash(null,null,\'all-due\')' : 'App.goTab(\'create\')', l: due > 0 ? 'Réviser' : 'Créer' };
   }
@@ -148,7 +148,7 @@ function nextStepHtml() {
     }).filter(Boolean)[0];
     if (empty) n = { t: '« ' + empty.name + ' » est encore vide', d: 'Colle ton cours ou ajoute quelques cartes pour commencer à réviser.', go: 'App.openDeck(\'' + empty.id + '\')', l: 'Remplir' };
   }
-  if (!n && !hasStudyProfile()) n = { t: 'Complète ton parcours', d: 'Niveau, matières, examens : pour des recommandations adaptées à tes études.', go: 'App.editStudy()', l: 'Compléter' };
+  if (!n && !hasStudyProfile()) n = { t: 'Complète ton profil', d: 'Études, activité ou envies d\'apprendre : pour des recommandations adaptées.', go: 'App.editStudy()', l: 'Compléter' };
   if (!n) return '';
   return '<div class="slim-card tap next-step" onclick="' + n.go + '"><div style="flex:1;min-width:0;"><div class="next-kicker">Prochaine étape</div><div class="mode-title">' + esc(n.t) + '</div>'
     + '<div class="mode-desc">' + esc(n.d) + '</div></div><span class="next-go">' + n.l + ' ›</span></div>';
@@ -157,13 +157,13 @@ function nextStepHtml() {
 function studyCardHtml() {
   const days = examDaysLeft();
   if (!hasStudyProfile()) {
-    return '<div class="card tap" onclick="App.editStudy()"><div class="row between"><div><div class="mode-title">Renseigne tes études</div>'
-      + '<div class="mode-desc">Niveau, diplôme, matières : pour des recommandations adaptées.</div></div><span class="stat-more" style="margin:0;">Compléter ›</span></div></div>';
+    return '<div class="card tap" onclick="App.editStudy()"><div class="row between"><div><div class="mode-title">Complète ton profil</div>'
+      + '<div class="mode-desc">Études, activité ou envies d\'apprendre : pour des recommandations adaptées.</div></div><span class="stat-more" style="margin:0;">Compléter ›</span></div></div>';
   }
   const courses = state.profile.courses || [];
   return '<div class="card tap" onclick="App.editStudy()"><div class="row between" style="align-items:flex-start;"><div style="min-width:0;">'
     + '<div class="mode-title">' + esc(studySummary() || 'Mon parcours') + '</div>'
-    + (days !== null ? '<div class="mode-desc">Examen ' + (days === 0 ? 'aujourd\'hui' : 'dans ' + pl(days, 'jour')) + '</div>' : '')
+    + (days !== null ? '<div class="mode-desc">' + deadlineLabel() + ' ' + (days === 0 ? 'aujourd\'hui' : 'dans ' + pl(days, 'jour')) + '</div>' : '')
     + (courses.length ? '<div class="tag-row">' + courses.slice(0, 8).map(c => '<span class="mini-tag">' + esc(c) + '</span>').join('') + (courses.length > 8 ? '<span class="mini-tag">+' + (courses.length - 8) + '</span>' : '') + '</div>' : '')
     + '</div><span class="stat-more" style="margin:0;">Modifier ›</span></div></div>';
 }
@@ -176,7 +176,7 @@ function renderSettings() {
     + '<div style="flex:1;min-width:0;"><div class="profile-name">' + esc(state.profile.pseudo) + '</div><div class="rub-meta">' + (state.profile.email ? esc(state.profile.email) + ' · ' : '') + 'Niveau ' + lv.level + ' · ' + totalReviews() + ' cartes révisées</div></div>'
     + '<span class="stat-more" style="margin:0;">Modifier ›</span></div>';
 
-  html += '<div class="section-label">Mon parcours</div>' + studyCardHtml();
+  html += '<div class="section-label">Mon profil</div>' + studyCardHtml();
   html += '<div class="section-label">Objectif et rappel</div>'
     + '<div class="card"><div class="mode-title">Objectif quotidien</div><div class="mode-desc" style="margin-bottom:10px;">Nombre de cartes à réviser chaque jour</div><div class="row">'
     + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" onclick="App.setGoal(' + n + ')">' + n + '</button>'; }).join('')
@@ -740,15 +740,24 @@ function aiButton(r) {
 // Choisit des cours en ligne d'après ce que la personne révise vraiment : les paquets qui
 // ont des cartes, les plus « à revoir » d'abord. keep = filtre facultatif sur les paquets.
 function recommendations(limit, keep) {
-  const levelLabel = (STUDY_LEVELS.find(l => l.id === (state.profile.study || {}).level) || {}).label;
+  const prof = state.profile, student = prof.status === 'student' || !prof.status;
+  // Mention ajoutée au motif : le niveau d'études pour un étudiant, le secteur pour une personne en activité.
+  const levelLabel = student ? (STUDY_LEVELS.find(l => l.id === (prof.study || {}).level) || {}).label
+    : (prof.status === 'working' ? ((WORK_SECTORS.find(x => x.id === (prof.work || {}).sector) || {}).label) : '');
   const langTopic = lang => ({ title: lang.title, desc: 'Cours de langue en ligne, du débutant au niveau avancé', query: lang.query, providers: ['coursera', 'futurelearn'] });
   const cand = (t, why) => ({ t, why });
   // 1) Matières en cours (parcours d'études), 2) centres d'intérêt, 3) paquets réellement révisés.
   const byCourses = [], byInterests = [], byDecks = [];
   if (!keep) {
+    // Domaine précisé à la main (« Autre ») : on le rattache à un thème connu, sinon on cherche le texte tel quel.
+    const other = prof.status === 'working' ? (prof.work || {}).other : (prof.study || {}).other;
+    if (other) {
+      const t = MOOC_TOPICS.find(x => x.test.test(normalize(other))) || { title: other.charAt(0).toUpperCase() + other.slice(1), desc: 'Cours en ligne dans ton domaine', query: other, providers: ['coursera', 'edx'] };
+      byCourses.push(cand(t, 'Parce que ton domaine est « ' + other + ' »'));
+    }
     (state.profile.courses || []).forEach(function (c) {
       const t = MOOC_TOPICS.find(x => x.test.test(normalize(c))) || { title: c, desc: 'Cours en ligne en lien avec ta matière', query: c, providers: ['coursera', 'edx'] };
-      byCourses.push(cand(t, 'Parce que tu suis « ' + c + ' »' + (levelLabel ? ' · ' + levelLabel : '')));
+      byCourses.push(cand(t, (student ? 'Parce que tu suis « ' : 'Parce que tu veux apprendre « ') + c + ' »' + (levelLabel ? ' · ' + levelLabel : '')));
     });
     (state.meta.interests || []).forEach(function (id) {
       const it = INTERESTS.find(x => x.id === id);
@@ -757,7 +766,8 @@ function recommendations(limit, keep) {
       if (t) byInterests.push(cand(t, 'Parce que tu t\'intéresses à « ' + it.label + ' »'));
     });
   }
-  const decks = state.decks.filter(d => !d.parentId && treeCards(d.id).length > 0 && (!keep || keep(d)));
+  const hiddenRub = new Set(state.rubriques.filter(r => r.hidden).map(r => r.id));
+  const decks = state.decks.filter(d => !d.parentId && !hiddenRub.has(d.rubriqueId) && treeCards(d.id).length > 0 && (!keep || keep(d)));
   decks.sort((a, b) => dueTree(b.id).length - dueTree(a.id).length || treeCards(b.id).length - treeCards(a.id).length);
   decks.forEach(function (d) {
     const n = normalize(d.name);
@@ -1219,13 +1229,15 @@ function articleFeed() {
     const n = normalize(d.name);
     return !!d.speakLang || d.rubriqueId === 'r-langues' || MOOC_LANG_NAMES.some(l => l[0].test(n));
   });
-  const study = hasStudyProfile();
+  const study = state.profile.status === 'student';
+  const working = state.profile.status === 'working';
   const days = examDaysLeft();
   const examSoon = days !== null && days <= 30;
   const day = Math.floor(Date.now() / 86400000);
   return ARTICLES.map(function (a, i) {
     let score = a.tags.includes('langues') ? (hasLang ? 3 : -1) : 1;
     if (study && a.tags.includes('etudes')) score += 2;
+    if (working && a.tags.includes('actifs')) score += 3;
     if (examSoon && a.tags.includes('partiels')) score += 4;
     return { a, i, score: score + ((i + day) % ARTICLES.length) / 100 };
   }).sort((x, y) => y.score - x.score).slice(0, 4);
@@ -1287,19 +1299,41 @@ function sessionRecap() {
 const AVATARS = ['🙂', '😎', '🦊', '🐼', '🚀', '🎧', '⚽', '📚'];
 const GOAL_TEXT = { 5: 'Une pause de 2 minutes', 10: 'Une révision tranquille', 20: 'Un bon rythme', 30: 'Le mode intensif' };
 
+// Écrans selon la situation : étudiant -> study, en activité -> work, curieux -> directement les sujets.
+function onbFlow(o) {
+  const mid = o.status === 'student' ? ['study', 'courses'] : o.status === 'working' ? ['work', 'courses'] : o.status === 'curious' ? ['courses'] : [];
+  return o.studyOnly ? ['status'].concat(mid, ['recap']) : ['welcome', 'account', 'status'].concat(mid, ['goal', 'recap']);
+}
+// Liste déroulante native (sélecteur du téléphone) : value = identifiant sûr.
+function onbSelect(id, options, value, handler) {
+  return '<div class="onb-selectwrap"><select id="' + id + '" class="onb-select" onchange="' + handler + '(this.value)"><option value="">Choisir…</option>'
+    + options.map(o => '<option value="' + o.value + '"' + (o.value === value ? ' selected' : '') + '>' + esc(o.label) + '</option>').join('') + '</select></div>';
+}
+// Encadré affiché quand on choisit « Autre » : champ libre + explication sur l'IA.
+function otherBox(label, value, placeholder, detected) {
+  const fld = STUDY_FIELDS.find(f => f.id === detected);
+  return '<div class="onb-ai"><div class="onb-ai-head"><span class="onb-ai-ic">✨</span>' + label + '</div>'
+    + '<input id="onb-other" class="onb-input" maxlength="60" placeholder="' + esc(placeholder) + '" value="' + esc(value) + '" autocomplete="off"/>'
+    + '<div class="onb-ai-note">Une IA lira ta réponse pour la comprendre et te recommander des matières, des cours et des articles adaptés. '
+    + 'Prototype : pour l\'instant, une analyse simplifiée sur ton appareil.</div>'
+    + (fld ? '<div class="onb-ai-hit">Domaine reconnu : ' + esc(fld.label) + '</div>' : '') + '</div>';
+}
+
 function renderOnboarding() {
   const o = state.onboard;
-  const step = o.flow[o.i];
-  const last = o.i === o.flow.length - 1;
-  const mid = o.flow.filter(x => x !== 'welcome' && x !== 'recap');
-  const eyebrow = 'Étape ' + (mid.indexOf(step) + 1) + ' sur ' + mid.length;
+  const flow = onbFlow(o);
+  const step = flow[o.i];
+  const last = o.i === flow.length - 1;
+  const mid = flow.filter(x => x !== 'welcome' && x !== 'recap');
+  const eyebrow = o.studyOnly ? 'Mon profil' : 'Étape ' + (mid.indexOf(step) + 1) + ' sur ' + mid.length;
+  const student = o.status === 'student';
   const chips = (list, isSel, call) => '<div class="chip-row">' + list.map((x, i) => '<button class="chip wide' + (isSel(x) ? ' sel' : '') + '" onclick="' + call(x, i) + '">' + esc(x.label !== undefined ? x.label : x) + '</button>').join('') + '</div>';
   let body = '';
   if (step === 'welcome') {
     const feat = (icon, t, d) => '<div class="onb-feat"><span class="onb-ic">' + tabIcon(icon) + '</span><div><div class="mode-title">' + t + '</div><div class="mode-desc">' + d + '</div></div></div>';
     body = '<div class="onb-hero"><div class="eyebrow">Bienvenue</div><h1 class="title onb-brand">La Boîte à Fiches</h1>'
-      + '<div class="subtitle">Révise mieux, par petites sessions.</div></div>'
-      + feat(TAB_ICONS.learn, 'Révise à ton rythme', 'Flashcards, QCM, textes à trous et appariement, avec des rappels espacés.')
+      + '<div class="subtitle">Apprends et révise par petites sessions, à ton rythme.</div></div>'
+      + feat(TAB_ICONS.learn, 'Apprends à ton rythme', 'Flashcards, QCM, textes à trous et appariement, avec des rappels espacés.')
       + feat(TAB_ICONS.play, 'Défie tes amis', 'Duels, classement de la semaine et défi du jour.')
       + feat(TAB_ICONS.progress, 'Vois tes progrès', 'Série de jours, niveau, badges et statistiques.');
   } else if (step === 'account') {
@@ -1311,23 +1345,40 @@ function renderOnboarding() {
       + '<label class="onb-label" for="onb-email">E-mail <span class="onb-opt">facultatif</span></label><input id="onb-email" class="onb-input" type="email" inputmode="email" maxlength="80" placeholder="prenom@exemple.fr" value="' + esc(o.email) + '" autocomplete="off" autocapitalize="off"/>'
       + (o.error ? '<div class="onb-error">' + esc(o.error) + '</div>' : '')
       + '<div class="onb-note">Pas de mot de passe : dans la version en ligne, tu te connecteras avec un lien envoyé par e-mail. Pour l\'instant, ton profil est enregistré uniquement sur cet appareil.</div>';
+  } else if (step === 'status') {
+    body = '<div class="eyebrow">' + eyebrow + '</div><h1 class="title">Tu es plutôt…</h1>'
+      + '<div class="subtitle">On adapte les questions, les recommandations et les conseils à ta situation.</div>'
+      + STATUSES.map(x => '<button class="onb-goal' + (o.status === x.id ? ' sel' : '') + '" onclick="App.onbStatus(\'' + x.id + '\')"><span><span class="mode-title">' + x.label + '</span><span class="mode-desc">' + x.desc + '</span></span></button>').join('')
+      + (o.error ? '<div class="onb-error">' + esc(o.error) + '</div>' : '');
   } else if (step === 'study') {
     const lvl = STUDY_LEVELS.find(l => l.id === o.level);
     const fld = STUDY_FIELDS.find(f => f.id === o.field);
-    body = '<div class="eyebrow">' + (o.studyOnly ? 'Mon parcours' : eyebrow) + '</div><h1 class="title">Tes études</h1>'
+    body = '<div class="eyebrow">' + eyebrow + '</div><h1 class="title">Tes études</h1>'
       + '<div class="subtitle">Pour te proposer des cours, des articles et des rappels adaptés à ton parcours.</div>'
-      + '<div class="onb-label">Niveau</div>' + chips(STUDY_LEVELS, l => l.id === o.level, l => 'App.onbLevel(\'' + l.id + '\')')
-      + (lvl && lvl.years.length ? '<div class="onb-label">Année</div>' + chips(lvl.years, y => y === o.year, (y, i) => 'App.onbYear(' + i + ')') : '')
-      + '<div class="onb-label">Domaine</div>' + chips(STUDY_FIELDS, f => f.id === o.field, f => 'App.onbField(\'' + f.id + '\')')
+      + '<label class="onb-label" for="onb-level">Niveau</label>' + onbSelect('onb-level', STUDY_LEVELS.map(l => ({ value: l.id, label: l.label })), o.level, 'App.onbLevel')
+      + (lvl && lvl.years.length ? '<label class="onb-label" for="onb-year">Année</label>' + onbSelect('onb-year', lvl.years.map((y, i) => ({ value: String(i), label: y })), String(lvl.years.indexOf(o.year)), 'App.onbYear') : '')
+      + '<label class="onb-label" for="onb-field">Domaine</label>' + onbSelect('onb-field', STUDY_FIELDS.map(f => ({ value: f.id, label: f.label })), o.field, 'App.onbField')
+      + (o.field === 'autre' ? otherBox('Précise ton domaine', o.fieldOther, 'ex : architecture, paysagisme, œnologie…', detectField(o.fieldOther)) : '')
       + '<label class="onb-label" for="onb-degree">Diplôme préparé <span class="onb-opt">facultatif</span></label><input id="onb-degree" class="onb-input" maxlength="60" placeholder="' + esc(fld ? fld.ph : 'ex : Bachelor, Master, BTS…') + '" value="' + esc(o.degree) + '" autocomplete="off"/>'
       + '<label class="onb-label" for="onb-exam">Prochain examen ou partiel <span class="onb-opt">facultatif</span></label><input id="onb-exam" class="onb-input" type="date" min="' + todayStr() + '" value="' + esc(o.exam) + '"/>'
       + '<div class="onb-note">Avec une date d\'examen, l\'appli te rappelle le compte à rebours et met en avant des conseils de préparation.</div>';
+  } else if (step === 'work') {
+    const sec = WORK_SECTORS.find(x => x.id === o.sector);
+    body = '<div class="eyebrow">' + eyebrow + '</div><h1 class="title">Ton activité</h1>'
+      + '<div class="subtitle">Pour te proposer des sujets et des cours utiles dans ton quotidien professionnel.</div>'
+      + '<label class="onb-label" for="onb-sector">Secteur</label>' + onbSelect('onb-sector', WORK_SECTORS.map(x => ({ value: x.id, label: x.label })), o.sector, 'App.onbSector')
+      + (o.sector === 'autre' ? otherBox('Précise ton secteur', o.sectorOther, 'ex : agriculture, aéronautique, immobilier…', detectField(o.sectorOther)) : '')
+      + '<label class="onb-label" for="onb-job">Métier ou poste <span class="onb-opt">facultatif</span></label><input id="onb-job" class="onb-input" maxlength="60" placeholder="' + esc(sec ? sec.ph : 'ex : Ton poste ou ton métier') + '" value="' + esc(o.job) + '" autocomplete="off"/>'
+      + '<label class="onb-label" for="onb-wgoal">Ce que tu veux accomplir</label>' + onbSelect('onb-wgoal', WORK_GOALS.map(g => ({ value: g.id, label: g.label })), o.workGoal, 'App.onbWorkGoal')
+      + '<label class="onb-label" for="onb-exam">Échéance éventuelle <span class="onb-opt">facultatif</span></label><input id="onb-exam" class="onb-input" type="date" min="' + todayStr() + '" value="' + esc(o.exam) + '"/>'
+      + '<div class="onb-note">Certification, entretien, voyage… avec une date, l\'appli te rappelle le compte à rebours.</div>';
   } else if (step === 'courses') {
-    const choices = courseChoices(o.field, o.courses);
-    body = '<div class="eyebrow">' + (o.studyOnly ? 'Mon parcours' : eyebrow) + '</div><h1 class="title">Tes matières</h1>'
-      + '<div class="subtitle">Ce que tu étudies en ce moment. Chaque matière devient un paquet prêt à remplir.</div>'
+    const choices = courseChoices(o, o.courses);
+    const noun = student ? 'matières' : 'sujets';
+    body = '<div class="eyebrow">' + eyebrow + '</div><h1 class="title">Tes ' + noun + '</h1>'
+      + '<div class="subtitle">' + (student ? 'Ce que tu étudies en ce moment.' : 'Ce que tu aimerais apprendre ou approfondir.') + ' Chacun devient un paquet prêt à remplir.</div>'
       + '<div class="chip-row" style="margin-top:14px;">' + choices.map((c, i) => '<button class="chip wide' + (o.courses.includes(c) ? ' sel' : '') + '" onclick="App.onbCourse(' + i + ')">' + esc(c) + '</button>').join('') + '</div>'
-      + '<div class="onb-add"><input id="onb-course" class="onb-input" maxlength="40" placeholder="Une autre matière…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){App.onbAddCourse();}"/>'
+      + '<div class="onb-add"><input id="onb-course" class="onb-input" maxlength="40" placeholder="' + (student ? 'Une autre matière…' : 'Un autre sujet…') + '" autocomplete="off" onkeydown="if(event.key===\'Enter\'){App.onbAddCourse();}"/>'
       + '<button class="btn" onclick="App.onbAddCourse()">Ajouter</button></div>'
       + '<div class="onb-label">Langues que tu apprends</div>'
       + chips(INTERESTS.filter(i => i.group === 'Langues'), i => o.interests.includes(i.id), i => 'App.onbInterest(\'' + i.id + '\')')
@@ -1340,25 +1391,31 @@ function renderOnboarding() {
       + '<button class="chip' + (o.remind ? ' sel' : '') + '" onclick="App.onbRemind()">' + (o.remind ? 'Activé' : 'Désactivé') + '</button></div>'
       + (o.remind ? '<div class="row" style="margin-top:12px;"><span class="rub-meta" style="margin:0;">Heure</span><input type="time" class="time-input" value="' + esc(o.time) + '" onchange="App.onbTime(this.value)"/></div>' : '') + '</div>';
   } else {
-    const lvl = STUDY_LEVELS.find(l => l.id === o.level);
-    const fld = STUDY_FIELDS.find(f => f.id === o.field);
-    const parcours = [o.degree, lvl && (lvl.label + (o.year ? ' · ' + o.year : '')), fld && fld.label].filter(Boolean).join(' · ');
+    const st = STATUSES.find(x => x.id === o.status);
+    let profileLine = '';
+    if (o.status === 'student') {
+      const lvl = STUDY_LEVELS.find(l => l.id === o.level), fld = STUDY_FIELDS.find(f => f.id === o.field);
+      profileLine = [o.degree, lvl && (lvl.label + (o.year ? ' · ' + o.year : '')), fld && (fld.id === 'autre' ? (o.fieldOther || fld.label) : fld.label)].filter(Boolean).join(' · ');
+    } else if (o.status === 'working') {
+      const sec = WORK_SECTORS.find(x => x.id === o.sector), goal = WORK_GOALS.find(x => x.id === o.workGoal);
+      profileLine = [o.job, sec && (sec.id === 'autre' ? (o.sectorOther || sec.label) : sec.label), goal && goal.label].filter(Boolean).join(' · ');
+    }
     const langs = INTERESTS.filter(i => o.interests.includes(i.id)).map(i => esc(i.label));
     let days = null;
-    if (o.exam) { const n = Math.round((Date.parse(o.exam + 'T00:00:00') - Date.parse(todayStr() + 'T00:00:00')) / 86400000); if (n >= 0) days = n; }
+    if (o.exam && o.status !== 'curious') { const n = Math.round((Date.parse(o.exam + 'T00:00:00') - Date.parse(todayStr() + 'T00:00:00')) / 86400000); if (n >= 0) days = n; }
     const row = (k, v) => '<div class="onb-sum"><span>' + k + '</span><b>' + v + '</b></div>';
-    body = '<div class="onb-hero"><div class="eyebrow">' + (o.studyOnly ? 'Mon parcours' : 'Terminé') + '</div><h1 class="title">' + (o.studyOnly ? 'Vérifie et enregistre' : 'C\'est prêt, ' + esc(o.pseudo) + ' !') + '</h1></div>'
+    body = '<div class="onb-hero"><div class="eyebrow">' + (o.studyOnly ? 'Mon profil' : 'Terminé') + '</div><h1 class="title">' + (o.studyOnly ? 'Vérifie et enregistre' : 'C\'est prêt, ' + esc(o.pseudo) + ' !') + '</h1></div>'
       + '<div class="stat-card"><div class="row"><div class="badge" style="width:56px;height:56px;font-size:28px;border-radius:16px;background:var(--card);">' + esc(o.avatar) + '</div>'
       + '<div style="min-width:0;"><div class="profile-name">' + esc(o.pseudo) + '</div><div class="rub-meta">' + (o.email ? esc(o.email) : 'Compte sur cet appareil') + '</div></div></div>'
-      + row('Parcours', parcours ? esc(parcours) : 'non renseigné')
-      + row('Matières', o.courses.length ? o.courses.map(esc).join(', ') : 'aucune')
-      + (days !== null ? row('Examen', days === 0 ? 'aujourd\'hui' : 'dans ' + pl(days, 'jour')) : '')
+      + row('Situation', st ? esc(st.label) : 'non renseignée')
+      + (profileLine ? row(student ? 'Parcours' : 'Activité', esc(profileLine)) : '')
+      + (o.courses.length ? row(student ? 'Matières' : 'Sujets', o.courses.map(esc).join(', ')) : '')
+      + (days !== null ? row(student ? 'Examen' : 'Échéance', days === 0 ? 'aujourd\'hui' : 'dans ' + pl(days, 'jour')) : '')
       + (langs.length ? row('Langues', langs.join(', ')) : '')
-      + row('Objectif', pl(o.goal, 'carte') + ' par jour')
-      + row('Rappel', o.remind ? 'à ' + esc(o.time) : 'désactivé') + '</div>'
+      + (o.studyOnly ? '' : row('Objectif', pl(o.goal, 'carte') + ' par jour') + row('Rappel', o.remind ? 'à ' + esc(o.time) : 'désactivé')) + '</div>'
       + '<div class="onb-note">Tu pourras tout modifier dans l\'onglet Profil.</div>';
   }
-  const dots = o.flow.map((_, i) => '<i class="' + (i === o.i ? 'on' : i < o.i ? 'done' : '') + '"></i>').join('');
+  const dots = flow.map((_, i) => '<i class="' + (i === o.i ? 'on' : i < o.i ? 'done' : '') + '"></i>').join('');
   const primary = step === 'welcome' ? 'Commencer' : last ? (o.studyOnly ? 'Enregistrer' : 'Commencer à réviser') : 'Continuer';
   const act = last ? 'App.onbFinish(\'' + (o.studyOnly ? 'home' : 'review') + '\')' : 'App.onbNext()';
   return '<div class="onb"><div class="onb-top">'
