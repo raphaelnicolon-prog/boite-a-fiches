@@ -5,7 +5,7 @@
 // Tant qu'on n'a pas ajouté de compte + synchronisation en ligne, tes fiches
 // créées sur ton téléphone ne se voient pas automatiquement sur ton ordinateur.
 
-import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES, INTERESTS } from './state.js';
+import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS } from './state.js';
 
 const STORAGE_KEY = 'boite-fiches-data-v1';
 
@@ -47,12 +47,19 @@ export function sanitizeMeta(raw) {
 }
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export function sanitizeProfile(raw) {
-  const p = { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '' };
+  const p = { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '', study: { level: '', year: '', field: '', degree: '', exam: '' }, courses: [] };
   if (!raw || typeof raw !== 'object') return p;
   if (typeof raw.pseudo === 'string' && raw.pseudo.trim().length >= 2 && raw.pseudo.trim().length <= 16) p.pseudo = raw.pseudo.trim();
   if (typeof raw.avatar === 'string' && raw.avatar.trim().length > 0 && raw.avatar.trim().length <= 8) p.avatar = raw.avatar.trim();
   if (typeof raw.email === 'string' && EMAIL_RE.test(raw.email.trim()) && raw.email.trim().length <= 80) p.email = raw.email.trim();
   if (typeof raw.createdAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.createdAt)) p.createdAt = raw.createdAt;
+  const st = raw.study && typeof raw.study === 'object' ? raw.study : {};
+  const lvl = STUDY_LEVELS.find(l => l.id === st.level);
+  if (lvl) { p.study.level = lvl.id; if (lvl.years.includes(st.year)) p.study.year = st.year; }
+  if (STUDY_FIELDS.some(f => f.id === st.field)) p.study.field = st.field;
+  if (typeof st.degree === 'string') p.study.degree = st.degree.trim().slice(0, 60);
+  if (typeof st.exam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(st.exam)) p.study.exam = st.exam;
+  if (Array.isArray(raw.courses)) p.courses = raw.courses.filter(c => typeof c === 'string' && c.trim()).map(c => c.trim().slice(0, 40)).filter((c, i, a) => a.indexOf(c) === i).slice(0, 14);
   return p;
 }
 export function sanitizeMulti(raw) {

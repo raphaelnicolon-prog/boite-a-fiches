@@ -224,7 +224,16 @@ export const MOOC_TOPICS = [
   { test: /innov|creativ/, title: 'Innovation et créativité', desc: 'Méthodes pour concevoir et piloter l\'innovation', query: 'innovation management', providers: ['edx', 'coursera'] },
   { test: /market/, title: 'Marketing', desc: 'Stratégie marketing, analyse client et communication', query: 'marketing', providers: ['coursera', 'edx'] },
   { test: /financ|compta|account/, title: 'Finance et comptabilité', desc: 'Les fondamentaux de la finance d\'entreprise', query: 'corporate finance', providers: ['coursera', 'edx'] },
-  { test: /data|donnee|statist|excel|sql/, title: 'Analyse de données', desc: 'Statistiques et analyse de données pour décider', query: 'data analysis', providers: ['coursera', 'edx'] }
+  { test: /data|donnee|statist|excel|sql/, title: 'Analyse de données', desc: 'Statistiques et analyse de données pour décider', query: 'data analysis', providers: ['coursera', 'edx'] },
+  { test: /entrepreneur|startup|creation d/, title: 'Entrepreneuriat', desc: 'De l\'idée au lancement d\'un projet', query: 'entrepreneurship', providers: ['coursera', 'edx'] },
+  { test: /econom/, title: 'Économie', desc: 'Micro et macroéconomie, concepts et applications', query: 'economics', providers: ['edx', 'coursera'] },
+  { test: /management|ressources humaines|\brh\b|leader/, title: 'Management et leadership', desc: 'Animer une équipe et conduire le changement', query: 'management leadership', providers: ['coursera', 'futurelearn'] },
+  { test: /algorithm|programm|base.* de donnee|reseau|cyber|logiciel|python|informatique|intelligence artificielle/, title: 'Informatique et programmation', desc: 'Programmation, algorithmes, réseaux et logiciels', query: 'computer science', providers: ['edx', 'coursera'] },
+  { test: /mathemat|physique|chimie|biolog|thermo|mecanique|electronique|resistance|geolog/, title: 'Sciences et mathématiques', desc: 'Les bases scientifiques, du cours à la pratique', query: 'mathematics science', providers: ['edx', 'coursera'] },
+  { test: /droit|juridi|politique|constitution/, title: 'Droit et institutions', desc: 'Notions juridiques et fonctionnement des institutions', query: 'law', providers: ['coursera', 'edx'] },
+  { test: /anatomie|physiolog|pharmaco|biochim|sante|patholog|medic|cellulaire/, title: 'Santé et médecine', desc: 'Sciences de la santé, du corps humain à la santé publique', query: 'health medicine', providers: ['coursera', 'edx'] },
+  { test: /litterat|histoire|philosoph|linguist|traduction/, title: 'Lettres et humanités', desc: 'Littérature, histoire et pensée critique', query: 'humanities', providers: ['futurelearn', 'coursera'] },
+  { test: /design|\bart\b|photograph|communication visuelle/, title: 'Design et création', desc: 'Design, image et communication visuelle', query: 'graphic design', providers: ['coursera', 'futurelearn'] }
 ];
 export const MOOC_LANGS = {
   'it-IT': { title: 'Langue italienne', query: 'learn italian' },
@@ -353,11 +362,11 @@ export const ARTICLES = [
     summary: 'Aller chercher une réponse en mémoire la renforce plus que la relecture.',
     source: 'Roediger et Karpicke, 2006',
     body: 'Relire son cours donne une impression de familiarité, pas la certitude de savoir. Les travaux de Roediger et Karpicke (2006) montrent que se tester activement améliore la rétention à long terme : c\'est l\'« effet de test ». Flashcards, QCM et textes à trous reposent tous sur ce mécanisme. Astuce : essayer de répondre avant de retourner la carte, même en hésitant.' },
-  { tag: 'Méthode', tags: ['methode'], time: '3 min', title: 'Surligner ne suffit pas',
+  { tag: 'Méthode', tags: ['methode', 'etudes'], time: '3 min', title: 'Surligner ne suffit pas',
     summary: 'Parmi les techniques d\'étude les plus répandues, certaines sont les moins efficaces.',
     source: 'Dunlosky et al., 2013',
     body: 'Une revue de dix techniques d\'étude publiée en 2013 par John Dunlosky et ses collègues classe le surlignage et la relecture parmi les moins utiles, alors qu\'elles sont très populaires. À l\'inverse, les tests pratiques (se poser des questions) et la pratique espacée obtiennent les meilleures évaluations. En clair : transformer ses notes en questions rapporte davantage que les colorier.' },
-  { tag: 'Planning', tags: ['methode'], time: '3 min', title: 'Étaler plutôt que bachoter',
+  { tag: 'Planning', tags: ['methode', 'etudes', 'partiels'], time: '3 min', title: 'Étaler plutôt que bachoter',
     summary: 'À durée égale, répartir les révisions dans le temps donne de meilleurs résultats durables.',
     source: 'Cepeda et al., 2006',
     body: 'Une synthèse de Cepeda et ses collègues (2006), portant sur plus de 300 expériences, conclut que répartir les séances dans le temps améliore la rétention à long terme par rapport à une session unique concentrée. Dix minutes par jour pendant deux semaines valent mieux, en général, que deux heures la veille. Le bachotage fonctionne pour demain matin, rarement pour l\'année suivante.' },
@@ -384,7 +393,19 @@ export const ARTICLES = [
   { tag: 'Motivation', tags: ['methode'], time: '3 min', title: 'Nudges : de petits coups de pouce',
     summary: 'Orienter un comportement sans rien interdire, c\'est la théorie du « nudge ».',
     source: 'Thaler et Sunstein, 2008',
-    body: 'Popularisé par Richard Thaler et Cass Sunstein (Nudge, 2008), le nudge oriente un choix par un petit changement de contexte, sans contrainte : option par défaut, rappel, preuve sociale, progression visible. Dans les applis d\'apprentissage, la série de jours, l\'objectif quotidien, le rappel à l\'heure choisie ou le classement entre amis en sont des exemples. Bien conçus, ils aident à tenir une habitude ; mal utilisés, ils peuvent devenir manipulateurs.' }
+    body: 'Popularisé par Richard Thaler et Cass Sunstein (Nudge, 2008), le nudge oriente un choix par un petit changement de contexte, sans contrainte : option par défaut, rappel, preuve sociale, progression visible. Dans les applis d\'apprentissage, la série de jours, l\'objectif quotidien, le rappel à l\'heure choisie ou le classement entre amis en sont des exemples. Bien conçus, ils aident à tenir une habitude ; mal utilisés, ils peuvent devenir manipulateurs.' },
+  { tag: 'Partiels', tags: ['etudes', 'partiels'], time: '3 min', title: 'Préparer ses partiels à rebours',
+    summary: 'Partir de la date de l\'examen pour répartir les révisions, plutôt que de commencer au hasard.',
+    source: 'Technique de rétroplanning, issue de la gestion de projet',
+    body: 'Le rétroplanning consiste à partir de la date de l\'examen et à remonter dans le temps. On liste d\'abord les chapitres à maîtriser, on estime le temps nécessaire à chacun, puis on place les séances en gardant les derniers jours pour les révisions générales et les annales. Un planning écrit réduit l\'angoisse du « je n\'aurai jamais le temps » : on voit tout de suite si la charge est réaliste et ce qu\'il faut commencer cette semaine.' },
+  { tag: 'Concentration', tags: ['etudes'], time: '3 min', title: 'La technique Pomodoro : 25 minutes, puis une pause',
+    summary: 'Travailler par blocs courts et chronométrés aide à rester concentré et à démarrer.',
+    source: 'Francesco Cirillo, années 1980',
+    body: 'Imaginée par Francesco Cirillo à la fin des années 1980, la technique Pomodoro découpe le travail en blocs de 25 minutes séparés par de courtes pauses de 5 minutes, avec une pause plus longue toutes les quatre séquences. Le chronomètre transforme une grosse tâche floue (« réviser la finance ») en objectif précis (« finir ce chapitre en 25 minutes »). Une session de cartes ou un Medley se prête bien à ce rythme.' },
+  { tag: 'Méthode', tags: ['etudes', 'methode'], time: '3 min', title: 'Apprendre en expliquant à quelqu\'un',
+    summary: 'Se préparer à enseigner une notion aide à mieux la comprendre et à mieux la retenir.',
+    source: 'Fiorella et Mayer, 2013',
+    body: 'Des expériences de Logan Fiorella et Richard Mayer (2013) montrent que les étudiants qui se préparent à enseigner un contenu, puis l\'expliquent, obtiennent de meilleurs résultats ensuite que ceux qui se contentent de le relire. Réviser à plusieurs, c\'est donc une bonne occasion de s\'interroger à tour de rôle : le duel et le défi entre amis ont la même logique, avec un peu de compétition en plus.' }
 ];
 
 // ---------- Analyse d'un texte de cours (locale, sans IA) ----------

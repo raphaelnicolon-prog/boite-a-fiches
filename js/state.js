@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '42';
+export const APP_VERSION = '43';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -57,7 +57,7 @@ export const state = {
   stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
   meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, interests: [], haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
   onboard: null,           // parcours d'accueil en cours (voir app.js) ; null = pas d'accueil affiché
-  profile: { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '' }, // pseudo et avatar affichés dans les duels et le classement
+  profile: { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '', study: { level: '', year: '', field: '', degree: '', exam: '' }, courses: [] }, // pseudo et avatar affichés dans les duels et le classement
   showProfile: false,
   showFeedback: false,
   feedbackRating: 0,
@@ -276,6 +276,61 @@ export function scheduleCard(card, success) {
 
 // ---------- Statistiques : série de jours et objectif quotidien ----------
 export const GOAL_CHOICES = [5, 10, 20, 30];
+
+// Parcours d'études demandé à l'accueil (sert aux recommandations de cours, d'articles et aux rappels).
+export const STUDY_LEVELS = [
+  { id: 'lycee', label: 'Lycée', years: ['Seconde', 'Première', 'Terminale'] },
+  { id: 'prepa', label: 'Classe préparatoire', years: ['1re année', '2e année'] },
+  { id: 'licence', label: 'Licence / Bachelor', years: ['1re année', '2e année', '3e année'] },
+  { id: 'master', label: 'Master / MBA', years: ['1re année', '2e année'] },
+  { id: 'doctorat', label: 'Doctorat', years: ['1re année', '2e année', '3e année'] },
+  { id: 'pro', label: 'Formation continue', years: [] }
+];
+export const STUDY_FIELDS = [
+  { id: 'gestion', label: 'Commerce et gestion', ph: 'ex : Bachelor, Master en management' },
+  { id: 'ingenierie', label: 'Ingénierie', ph: 'ex : Diplôme d\'ingénieur, BUT' },
+  { id: 'info', label: 'Informatique et données', ph: 'ex : Licence informatique, Master data science' },
+  { id: 'droit', label: 'Droit et sciences po', ph: 'ex : Licence de droit, Sciences Po' },
+  { id: 'sante', label: 'Santé', ph: 'ex : PASS, soins infirmiers, pharmacie' },
+  { id: 'sciences', label: 'Sciences', ph: 'ex : Licence de physique, biologie' },
+  { id: 'lettres', label: 'Lettres et langues', ph: 'ex : Licence LLCER, traduction' },
+  { id: 'arts', label: 'Arts et design', ph: 'ex : DNMADE, école d\'arts' },
+  { id: 'autre', label: 'Autre', ph: 'ex : Baccalauréat général' }
+];
+// Matières suggérées selon le domaine (l'élève peut aussi en ajouter à la main).
+export const FIELD_COURSES = {
+  gestion: ['Marketing', 'Finance', 'Comptabilité', 'Gestion de projet', 'Management', 'Économie', 'Statistiques', 'Stratégie', 'Ressources humaines', 'Droit des affaires', 'Entrepreneuriat', 'Conseil'],
+  ingenierie: ['Mathématiques', 'Physique', 'Mécanique', 'Électronique', 'Thermodynamique', 'Résistance des matériaux', 'Informatique', 'Gestion de projet', 'Statistiques'],
+  info: ['Algorithmique', 'Bases de données', 'Programmation', 'Réseaux', 'Cybersécurité', 'Intelligence artificielle', 'Mathématiques', 'Génie logiciel', 'Statistiques'],
+  droit: ['Droit civil', 'Droit pénal', 'Droit constitutionnel', 'Droit européen', 'Droit des affaires', 'Histoire du droit', 'Science politique', 'Relations internationales'],
+  sante: ['Anatomie', 'Physiologie', 'Biochimie', 'Pharmacologie', 'Pathologie', 'Santé publique', 'Biologie cellulaire'],
+  sciences: ['Mathématiques', 'Physique', 'Chimie', 'Biologie', 'Statistiques', 'Géologie', 'Informatique'],
+  lettres: ['Littérature', 'Histoire', 'Philosophie', 'Linguistique', 'Traduction', 'Langues étrangères'],
+  arts: ['Histoire de l\'art', 'Design', 'Communication visuelle', 'Photographie', 'Marketing'],
+  autre: ['Culture générale', 'Mathématiques', 'Français', 'Histoire-géographie', 'Langues étrangères', 'Économie']
+};
+// Matières proposées : celles du domaine choisi, plus celles ajoutées à la main (même ordre à l'affichage et au clic).
+export function courseChoices(field, selected) {
+  const base = FIELD_COURSES[field || 'autre'] || FIELD_COURSES.autre;
+  return base.concat((selected || []).filter(c => !base.includes(c)));
+}
+export function studySummary() {
+  const s = state.profile.study || {};
+  const lvl = STUDY_LEVELS.find(l => l.id === s.level);
+  const fld = STUDY_FIELDS.find(f => f.id === s.field);
+  return [s.degree, lvl && (lvl.label + (s.year ? ' · ' + s.year : '')), fld && fld.label].filter(Boolean).join(' · ');
+}
+export function hasStudyProfile() {
+  const s = state.profile.study || {};
+  return !!(s.level || s.field || s.degree || (state.profile.courses || []).length);
+}
+// Jours restants avant le prochain examen saisi (null si aucun ou déjà passé).
+export function examDaysLeft() {
+  const e = state.profile.study && state.profile.study.exam;
+  if (!e) return null;
+  const n = Math.round((Date.parse(e + 'T00:00:00') - Date.parse(todayStr() + 'T00:00:00')) / 86400000);
+  return n >= 0 ? n : null;
+}
 
 // Centres d'intérêt proposés à l'accueil (servent aux recommandations de cours et d'articles).
 // Les langues ont pour id le code de la voix ; les matières un mot-clé repris dans MOOC_TOPICS (demo.js).

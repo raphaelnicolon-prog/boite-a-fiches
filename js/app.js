@@ -3,8 +3,8 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
-import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, courseChoices, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
+import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze, MOOC_TOPICS } from './demo.js';
 import { eligibleDecks, startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
 import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
 import { render, friendResultsHtml, searchResultsHtml } from './render.js';
@@ -125,17 +125,25 @@ function sendToTrash(type, name, payload) {
 }
 
 // État de départ du parcours d'accueil (rejoué = on part du profil actuel).
-function makeOnboard(replay) {
-  return { step: 0, replay, error: '', pseudo: state.profile.pseudo !== 'Toi' ? state.profile.pseudo : '', avatar: state.profile.avatar,
-    email: state.profile.email || '', goal: state.stats.goal, interests: (state.meta.interests || []).slice(),
+// studyOnly : seulement les écrans « parcours » et « matières », puis le récapitulatif (depuis l'onglet Profil).
+function makeOnboard(replay, studyOnly) {
+  const st = state.profile.study || {};
+  return { flow: studyOnly ? ['study', 'courses', 'recap'] : ['welcome', 'account', 'study', 'courses', 'goal', 'recap'], i: 0, replay, studyOnly: !!studyOnly, error: '',
+    pseudo: state.profile.pseudo !== 'Toi' ? state.profile.pseudo : '', avatar: state.profile.avatar, email: state.profile.email || '',
+    level: st.level || '', year: st.year || '', field: st.field || '', degree: st.degree || '', exam: st.exam || '',
+    courses: (state.profile.courses || []).slice(), goal: state.stats.goal, interests: (state.meta.interests || []).slice(),
     remind: state.meta.reminder.on, time: state.meta.reminder.time };
 }
+function onbStep() { const o = state.onboard; return o ? o.flow[o.i] : ''; }
 // Recopie dans l'état ce qui a été tapé dans les champs (on ne rafraîchit pas à chaque lettre).
 function syncOnbInputs() {
   const o = state.onboard;
   if (!o) return;
-  const p = document.getElementById('onb-pseudo'); if (p) o.pseudo = p.value.trim();
-  const e = document.getElementById('onb-email'); if (e) o.email = e.value.trim();
+  const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : null; };
+  const p = g('onb-pseudo'); if (p !== null) o.pseudo = p;
+  const e = g('onb-email'); if (e !== null) o.email = e;
+  const d = g('onb-degree'); if (d !== null) o.degree = d.slice(0, 60);
+  const x = g('onb-exam'); if (x !== null) o.exam = /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '';
 }
 
 // Modes à une carte à la fois cochés pour le Medley (l'appariement est géré à part).
@@ -618,28 +626,70 @@ window.App = {
   toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
 
   // ---- Accueil de la première ouverture ----
-  // Parcours d'accueil en 5 écrans : présentation, compte, centres d'intérêt, objectif, récapitulatif.
+  // Parcours d'accueil : présentation, compte, parcours d'études, matières, objectif, récapitulatif.
   // Le « compte » est un profil enregistré sur l'appareil (aucun serveur dans cette version).
-  startOnboarding() { state.onboard = makeOnboard(true); state.view = 'home'; refresh(); window.scrollTo(0, 0); },
+  startOnboarding() { state.onboard = makeOnboard(true, false); state.view = 'home'; refresh(); window.scrollTo(0, 0); },
+  // Depuis l'onglet Profil : on ne repasse que par le parcours d'études et les matières.
+  editStudy() { state.onboard = makeOnboard(true, true); refresh(); window.scrollTo(0, 0); },
   onbNext() {
     const o = state.onboard;
     if (!o) return;
     syncOnbInputs();
-    if (o.step === 1) {
+    if (onbStep() === 'account') {
       if (o.pseudo.length < 2 || o.pseudo.length > 16) { o.error = 'Ton pseudo doit faire entre 2 et 16 caractères.'; refresh(); return; }
       if (o.email && !EMAIL_RE.test(o.email)) { o.error = 'Cette adresse e-mail ne semble pas valide (ou laisse le champ vide).'; refresh(); return; }
     }
     o.error = '';
-    o.step = Math.min(o.step + 1, 4);
+    o.i = Math.min(o.i + 1, o.flow.length - 1);
     refresh(); window.scrollTo(0, 0);
   },
-  onbBack() { const o = state.onboard; if (!o || o.step === 0) return; syncOnbInputs(); o.error = ''; o.step--; refresh(); window.scrollTo(0, 0); },
+  onbBack() {
+    const o = state.onboard;
+    if (!o) return;
+    if (o.i === 0) { if (o.studyOnly) { state.onboard = null; refresh(); } return; }
+    syncOnbInputs(); o.error = ''; o.i--; refresh(); window.scrollTo(0, 0);
+  },
   onbAvatar(e) { syncOnbInputs(); state.onboard.avatar = e; refresh(); },
   onbInterest(id) {
     syncOnbInputs();
     const o = state.onboard;
     o.interests = o.interests.includes(id) ? o.interests.filter(x => x !== id) : o.interests.concat(id);
     refresh();
+  },
+  onbLevel(id) {
+    syncOnbInputs();
+    const o = state.onboard, lvl = STUDY_LEVELS.find(l => l.id === id);
+    if (!lvl) return;
+    o.level = o.level === id ? '' : id;
+    if (!lvl.years.includes(o.year) || !o.level) o.year = '';
+    refresh();
+  },
+  onbYear(i) {
+    syncOnbInputs();
+    const o = state.onboard, lvl = STUDY_LEVELS.find(l => l.id === o.level);
+    if (lvl && lvl.years[i]) { o.year = o.year === lvl.years[i] ? '' : lvl.years[i]; refresh(); }
+  },
+  onbField(id) {
+    syncOnbInputs();
+    const o = state.onboard;
+    if (STUDY_FIELDS.some(f => f.id === id)) { o.field = o.field === id ? '' : id; refresh(); }
+  },
+  // Matières : on passe l'index dans la liste affichée, jamais le texte (une apostrophe casserait le onclick).
+  onbCourse(i) {
+    syncOnbInputs();
+    const o = state.onboard, name = courseChoices(o.field, o.courses)[i];
+    if (name === undefined) return;
+    if (o.courses.includes(name)) o.courses = o.courses.filter(c => c !== name);
+    else if (o.courses.length < 14) o.courses = o.courses.concat(name);
+    refresh();
+  },
+  onbAddCourse() {
+    syncOnbInputs();
+    const o = state.onboard, el = document.getElementById('onb-course');
+    const name = el ? el.value.trim().slice(0, 40) : '';
+    if (name && !o.courses.some(c => normalize(c) === normalize(name)) && o.courses.length < 14) o.courses = o.courses.concat(name);
+    refresh();
+    const again = document.getElementById('onb-course'); if (again) again.focus();
   },
   onbGoal(n) { if (GOAL_CHOICES.includes(n)) { state.onboard.goal = n; refresh(); } },
   onbRemind() { state.onboard.remind = !state.onboard.remind; refresh(); },
@@ -651,10 +701,13 @@ window.App = {
   onbFinish(go) {
     const o = state.onboard;
     if (!o) return;
+    syncOnbInputs();
     state.profile.pseudo = o.pseudo || state.profile.pseudo;
     state.profile.avatar = o.avatar || state.profile.avatar;
     state.profile.email = o.email || '';
     if (!state.profile.createdAt) state.profile.createdAt = todayStr();
+    state.profile.study = { level: o.level, year: o.year, field: o.field, degree: o.degree.slice(0, 60), exam: o.exam };
+    state.profile.courses = o.courses.slice(0, 14);
     state.stats.goal = o.goal;
     state.meta.reminder.on = o.remind; state.meta.reminder.time = o.time;
     state.meta.interests = INTERESTS.map(i => i.id).filter(id => o.interests.includes(id));
@@ -664,9 +717,19 @@ window.App = {
       const have = state.decks.some(d => d.rubriqueId === lr.id && (d.speakLang === i.id || normalize(d.name) === normalize(i.label)));
       if (!have) state.decks.push({ id: 'd-' + Date.now() + '-' + i.id.slice(0, 2), name: i.label, rubriqueId: lr.id, speakLang: i.id, order: nextDeckOrder(lr.id, null) });
     });
+    // Chaque matière en cours devient un paquet (vide) dans « Spécial Révisions », prêt à remplir.
+    const rr = state.rubriques.find(r => r.id === 'r-revisions');
+    if (rr) o.courses.forEach(function (c, k) {
+      // Déjà un paquet du même sujet (ex. « Gestion de projet » et « Project Management ») : on n'en crée pas un second.
+      const topic = MOOC_TOPICS.find(x => x.test.test(normalize(c)));
+      const have = state.decks.some(d => d.rubriqueId === rr.id && (normalize(d.name) === normalize(c) || (topic && topic === MOOC_TOPICS.find(x => x.test.test(normalize(d.name))))));
+      if (!have) state.decks.push({ id: 'd-' + Date.now() + '-c' + k, name: c, rubriqueId: rr.id, speakLang: '', order: nextDeckOrder(rr.id, null) });
+    });
+    const studyOnly = o.studyOnly;
     state.meta.welcomed = true; state.onboard = null;
     persist();
-    if (go === 'review' && allDueCards().length > 0) this.startFlash(null, null, 'all-due');
+    if (studyOnly) { state.view = 'settings'; refresh(); window.scrollTo(0, 0); }
+    else if (go === 'review' && allDueCards().length > 0) this.startFlash(null, null, 'all-due');
     else { state.view = 'home'; refresh(); window.scrollTo(0, 0); }
   },
   skipWelcome() { state.meta.welcomed = true; state.onboard = null; persist(); refresh(); },
