@@ -217,13 +217,60 @@ export function allLeagueIds() {
   THEMES.forEach(t => LEVELS.forEach(l => ids.push(t.id + ':' + l.id)));
   return ids;
 }
-// Ligues proposées d'après les matières et langues du profil (niveau moyen par défaut).
-export function suggestedLeagues(texts) {
-  const ids = [];
-  THEMES.forEach(function (t) {
-    if (t.kw && texts.some(x => t.kw.test(x))) ids.push(t.id + ':moyen');
-  });
-  return ids;
+// Thèmes proches des matières et langues du profil (pour suggérer une ligue).
+export function suggestedThemes(texts) {
+  return THEMES.filter(t => t.kw && texts.some(x => t.kw.test(x))).map(t => t.id);
+}
+
+// ---- Une seule ligue par thème : ton niveau est réglé par le test de départ, puis par les montées et descentes ----
+export function themeLeague(themeId) {
+  return state.multi.joined.find(id => id.indexOf(themeId + ':') === 0) || null;
+}
+export function joinTheme(themeId, levelId) {
+  const id = themeId + ':' + levelId;
+  if (!parseLeague(id)) return null;
+  state.multi.joined = state.multi.joined.filter(x => x.indexOf(themeId + ':') !== 0).concat(id);
+  return id;
+}
+// On ne peut repasser le test que si l'on n'a pas encore joué de duel classé dans la saison (sinon, on pourrait
+// « se remettre » en Facile pour dominer la ligue).
+export function canRetest(themeId) {
+  const id = themeLeague(themeId);
+  return !id || myLeagueStats(id).played === 0;
+}
+
+// ---- Test de niveau (8 questions, difficulté adaptative) ----
+// On part du niveau Moyen ; une bonne réponse monte d'un cran, une mauvaise descend d'un cran.
+// Le niveau estimé est la moyenne des niveaux des dernières questions posées.
+export const PLACEMENT_N = 8;
+export function placementItem(themeId, levelIdx, used) {
+  const t = THEMES.find(x => x.id === themeId);
+  const bank = t.q[LEVELS[levelIdx].id];
+  const fresh = bank.filter(it => used.indexOf(it[0]) === -1);
+  const pool = fresh.length ? fresh : bank;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+export function placementEstimate(log) {
+  const last = log.slice(-5);
+  const avg = last.reduce((n, e) => n + e.level, 0) / (last.length || 1);
+  return Math.max(0, Math.min(LEVELS.length - 1, Math.round(avg - 0.01)));
+}
+// Compte rendu de l'« IA » (simulée : règles locales). Une vraie IA analyserait aussi les erreurs de fond.
+export function placementReport(themeId, log, idx) {
+  const t = THEMES.find(x => x.id === themeId);
+  const good = log.filter(e => e.correct).length;
+  const byLevel = LEVELS.map(function (l, i) {
+    const asked = log.filter(e => e.level === i);
+    return asked.length ? l.label + ' : ' + asked.filter(e => e.correct).length + '/' + asked.length : null;
+  }).filter(Boolean);
+  const missed = log.filter(e => !e.correct)[0];
+  const verdict = [
+    'Tu découvres le thème : la ligue Facile te permet de progresser sans pression.',
+    'Tu as de bonnes bases : la ligue Moyen est la plus adaptée.',
+    'Très bon niveau : tu peux affronter des joueurs expérimentés en Difficile.',
+    'Excellent niveau : la ligue Expert, la plus exigeante, est faite pour toi.'
+  ][idx];
+  return { good, total: log.length, byLevel, missed: missed ? missed.front : '', verdict, theme: t.label };
 }
 
 // Petite fonction de hachage : donne des nombres « aléatoires » mais stables (même ligue = mêmes chiffres).

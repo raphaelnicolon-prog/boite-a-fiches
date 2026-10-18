@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '49';
+export const APP_VERSION = '50';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -77,6 +77,7 @@ export const state = {
   multiLengths: [5],     // nombres de questions acceptés (un est tiré au hasard)
   arenaMode: 'ranked',   // 'ranked' (points de ligue) ou 'friendly' (combat amical, sans points)
   room: null,            // salon d'amis en préparation (voir app.js)
+  placement: null,       // test de niveau en cours pour rejoindre une ligue
   viewLeague: '',        // ligue affichée dans l'onglet Ligue
   showProposal: false,   // fenêtre « Proposer un thème »
   leagueScope: 'general', // cercle du classement : 'general', 'amis' ou 'promo'

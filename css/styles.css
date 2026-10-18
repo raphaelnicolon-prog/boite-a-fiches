@@ -614,3 +614,17 @@ h1.title.arena-result { font-size: 54px; letter-spacing: .1em; margin: 10px 0 4p
 .zone-legend i.up { background: var(--success); }
 .zone-legend i.down { background: var(--danger); }
 .elig-row { display: flex; align-items: center; gap: 12px; margin-top: 9px; font-size: 13.5px; }
+
+/* ---------- Rejoindre une ligue par test de niveau ---------- */
+.lg-mine { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px 12px; flex-wrap: wrap; }
+.lg-mylevel { font-size: 14px; }
+.lg-mylevel b { color: var(--primary); }
+.lg-actions { display: flex; align-items: center; gap: 12px; }
+.lg-join.big { width: 100%; padding: 13px; font-size: 14px; }
+.lg-levels-t { padding: 6px 16px 4px; font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); border-top: 1px solid var(--border); }
+.lg-level.here { background: rgba(53, 205, 191, 0.08); }
+.lg-level { border-top: none; padding: 8px 16px; }
+.lv-steps { display: flex; gap: 6px; margin-top: 8px; }
+.lv-steps span { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 99px; background: var(--card); color: var(--ink-soft); }
+.lv-steps span.done { color: var(--ink); }
+.lv-steps span.on { background: var(--primary); color: #06222a; }

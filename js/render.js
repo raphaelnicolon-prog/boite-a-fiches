@@ -11,7 +11,7 @@ import {
 import { AI_TOPICS, FACTS, DEMO_PEOPLE, ARTICLES, MOOC_PROVIDERS, MOOC_TOPICS, MOOC_LANGS, MOOC_LANG_NAMES } from './demo.js';
 import { todayStr } from './state.js';
 import { POINTS, DUEL_MODES } from './duel.js';
-import { LEVELS, THEMES, parseLeague, leagueLabel, leaguePlayers, leaguePrize, standings, myLeagueStats, daysLeftInSeason, ensureSeason, dailyPlayed, dailyLeft, DAILY_CAP, ZONE, MIN_PLAYED, zoneOf, levelStep } from './leagues.js';
+import { LEVELS, THEMES, parseLeague, leagueLabel, leaguePlayers, leaguePrize, standings, myLeagueStats, daysLeftInSeason, ensureSeason, dailyPlayed, dailyLeft, DAILY_CAP, ZONE, MIN_PLAYED, zoneOf, levelStep, themeLeague, suggestedThemes, canRetest, PLACEMENT_N } from './leagues.js';
 
 // Accord simple : pl(2, 'carte') donne « 2 cartes », pl(1, 'carte') donne « 1 carte ».
 function pl(n, one, many) {
@@ -19,11 +19,11 @@ function pl(n, one, many) {
 }
 
 // Écrans « immersifs » : pas de barre d'onglets pendant une session de révision ou un duel.
-const IMMERSIVE_VIEWS = ['session', 'duel'];
+const IMMERSIVE_VIEWS = ['session', 'duel', 'placement'];
 // Onglet actif selon l'écran affiché (la navigation à l'intérieur d'un onglet ne change pas d'onglet).
 const TAB_OF_VIEW = {
   home: 'learn', rubrique: 'learn', modes: 'learn', cards: 'learn', search: 'learn',
-  multi: 'play', league: 'play', friends: 'play', leagues: 'play', room: 'play', rules: 'play',
+  multi: 'play', league: 'play', friends: 'play', leagues: 'play', room: 'play', rules: 'play', placement: 'play',
   create: 'create', ai: 'create',
   stats: 'progress',
   settings: 'profile', trash: 'profile', pitch: 'profile'
@@ -38,7 +38,7 @@ export function render() {
   }
   const screens = {
     home: renderHome, rubrique: renderRubrique, modes: renderModes, cards: renderCards, search: renderSearch,
-    multi: renderMulti, league: renderLeague, friends: renderFriends, duel: renderDuel, leagues: renderLeagues, room: renderRoom, rules: renderRules,
+    multi: renderMulti, league: renderLeague, friends: renderFriends, duel: renderDuel, leagues: renderLeagues, room: renderRoom, rules: renderRules, placement: renderPlacement,
     create: renderCreate, ai: renderAi, stats: renderStats,
     settings: renderSettings, trash: renderTrash, pitch: renderPitch, session: renderSession
   };
@@ -941,21 +941,70 @@ function prizeBadge(id) {
   return pr.unlocked ? '<span class="lg-prize on">Lot de la saison</span>' : '<span class="lg-prize">Lot dès ' + fmtN(pr.min) + ' joueurs</span>';
 }
 
-// Lignes du catalogue : un bloc par thème avec ses 4 niveaux. Exportée : app.js la met à jour pendant la recherche.
+// Lignes du catalogue : un bloc par thème. On ne choisit pas son niveau : un test rapide le détermine,
+// puis les montées et descentes le font évoluer. Exportée : app.js la met à jour pendant la recherche.
 export function leagueRowsHtml(query) {
   const q = normalize(query || '');
-  const joined = state.multi.joined;
   const themes = THEMES.filter(t => !q || normalize(t.label + ' ' + t.desc).includes(q));
   if (!themes.length) return '<div class="rub-meta">Aucun thème ne correspond à « ' + esc(query) + ' ». Tu peux le proposer ci-dessous.</div>';
   return themes.map(function (t) {
-    return '<div class="lg-theme"><div class="lg-head"><div class="lg-title">' + esc(t.label) + '</div><div class="lg-desc">' + esc(t.desc) + '</div></div>'
+    const mine = themeLeague(t.id);
+    const lvl = mine ? parseLeague(mine).level : null;
+    const total = LEVELS.reduce((n, l) => n + leaguePlayers(t.id + ':' + l.id), 0);
+    return '<div class="lg-theme"><div class="lg-head"><div class="lg-title">' + esc(t.label) + '</div><div class="lg-desc">' + esc(t.desc) + ' · ' + pl(total, 'joueur') + '</div></div>'
+      + '<div class="lg-mine">' + (mine
+        ? '<div class="lg-mylevel">Ton niveau : <b>' + lvl.label + '</b></div><div class="lg-actions">'
+          + (canRetest(t.id) ? '<button class="lg-join on" onclick="App.startPlacement(\'' + t.id + '\')">Repasser le test</button>' : '')
+          + '<button class="hidebtn" onclick="App.leaveLeague(\'' + mine + '\')">quitter</button></div>'
+        : '<button class="lg-join big" onclick="App.startPlacement(\'' + t.id + '\')">Rejoindre · test de niveau</button>')
+      + '</div>'
+      + '<div class="lg-levels-t">Les 4 niveaux de la ligue</div>'
       + LEVELS.map(function (l) {
         const id = t.id + ':' + l.id;
-        const on = joined.includes(id);
-        return '<div class="lg-level"><div class="lg-lv"><b>' + l.label + '</b><span>' + pl(leaguePlayers(id), 'joueur') + '</span></div>' + prizeBadge(id)
-          + '<button class="lg-join' + (on ? ' on' : '') + '" onclick="App.joinLeague(\'' + id + '\')">' + (on ? 'Rejoint ✓' : 'Rejoindre') + '</button></div>';
+        return '<div class="lg-level' + (mine === id ? ' here' : '') + '"><div class="lg-lv"><b>' + l.label + (mine === id ? ' · toi' : '') + '</b><span>' + pl(leaguePlayers(id), 'joueur') + '</span></div>' + prizeBadge(id) + '</div>';
       }).join('') + '</div>';
   }).join('');
+}
+
+// Test de niveau : 8 questions de difficulté adaptative, puis verdict (évalué par une « IA » simulée).
+function renderPlacement() {
+  const pl_ = state.placement;
+  if (!pl_) return renderMulti();
+  const t = THEMES.find(x => x.id === pl_.theme);
+  const back = '<button class="backbtn" onclick="App.cancelPlacement()">‹ Annuler</button>';
+  if (pl_.phase === 'intro') {
+    return back + '<div class="arena-screen" style="text-align:left;align-items:stretch;"><div class="arena-kicker">Test de niveau</div><h1 class="title arena-big" style="text-align:left;">' + esc(t.label) + '</h1>'
+      + '<div class="subtitle">' + PLACEMENT_N + ' questions, environ 2 minutes. Elles s\'adaptent à tes réponses, et une IA évalue ton niveau pour te placer dans la bonne ligue.</div>'
+      + '<div class="stat-card"><div class="onb-sum" style="border:none;margin:0;padding:0;"><span>Ton niveau évolue ensuite</span><b>par montées et descentes</b></div>'
+      + '<div class="rub-meta" style="margin-top:8px;">Chaque fin de saison, les meilleurs montent d\'un niveau et les derniers descendent. Tu n\'as pas à choisir ton niveau.</div></div>'
+      + '<button class="btn onb-cta" style="margin-top:18px;" onclick="App.placementBegin()">Commencer le test</button>'
+      + '<button class="link" style="margin-top:14px;align-self:center;" onclick="App.placementJoin(\'facile\')">Passer le test et commencer en Facile</button></div>';
+  }
+  if (pl_.phase === 'loading') {
+    return '<div class="arena-screen"><div class="arena-kicker">Test de niveau</div><h1 class="title arena-big">L\'IA analyse tes réponses</h1><div class="spinner" style="margin-top:18px;"></div>'
+      + '<div class="subtitle" style="margin-top:20px;">Estimation de ton niveau en ' + esc(t.label) + '…</div></div>';
+  }
+  if (pl_.phase === 'result') {
+    const r = pl_.report;
+    return '<div class="arena-screen"><div class="arena-kicker">Résultat du test · ' + esc(t.label) + '</div>'
+      + '<div class="rub-meta" style="margin:6px 0 0;">Niveau estimé</div>'
+      + '<h1 class="title arena-result win" style="font-size:42px;">' + LEVELS[pl_.estimate].label + '</h1>'
+      + '<div class="lv-steps">' + LEVELS.map((l, i) => '<span class="' + (i === pl_.estimate ? 'on' : i < pl_.estimate ? 'done' : '') + '">' + l.label + '</span>').join('') + '</div>'
+      + '<div class="stat-card" style="width:100%;text-align:left;margin-top:16px;"><div class="mode-title">' + r.good + ' bonnes réponses sur ' + r.total + '</div>'
+      + '<div class="mode-desc" style="margin-top:4px;">' + esc(r.byLevel.join(' · ')) + '</div>'
+      + '<div class="mode-desc" style="margin-top:10px;color:var(--ink);">' + esc(r.verdict) + '</div>'
+      + (r.missed ? '<div class="rub-meta" style="margin-top:10px;">À consolider, par exemple : ' + esc(r.missed) + '</div>' : '') + '</div>'
+      + '<button class="btn arena-btn onb-cta" style="margin-top:18px;" onclick="App.placementJoin()">Rejoindre la ligue ' + esc(t.label) + ' · ' + LEVELS[pl_.estimate].label + '</button>'
+      + '<button class="link" style="margin-top:14px;" onclick="App.startPlacement(\'' + pl_.theme + '\')">Refaire le test</button>'
+      + '<div class="rub-meta" style="margin-top:14px;">Prototype : évaluation simulée par des règles locales. Dans la version complète, une IA analyserait aussi la nature de tes erreurs.</div></div>';
+  }
+  // question
+  const c = pl_.cur;
+  return '<div class="center"><div class="progress">Test de niveau · ' + esc(t.label) + ' · ' + (pl_.step + 1) + ' / ' + PLACEMENT_N + '</div>'
+    + '<div class="progress-bar"><i style="width:' + Math.round(pl_.step / PLACEMENT_N * 100) + '%"></i></div>'
+    + '<div class="qtext">' + esc(c.front) + '</div>'
+    + '<div class="opt-grid">' + c.options.map((o, i) => '<button class="opt" onclick="App.placementAnswer(' + i + ')">' + esc(o) + '</button>').join('') + '</div>'
+    + '<div class="footer-row"><button class="link" onclick="App.placementAnswer(-1)">Je ne sais pas</button></div></div>';
 }
 
 // Gros bouton d'accès au catalogue des ligues (hub et classement) : c'est le point d'entrée du multijoueur.
@@ -967,8 +1016,8 @@ function exploreButton() {
 
 function renderLeagues() {
   let html = '<button class="backbtn" onclick="App.openMulti()">‹ Arène</button>';
-  html += '<div class="eyebrow">Ligues</div><h1 class="title">Choisis tes ligues</h1>';
-  html += '<div class="subtitle">Une ligue = un thème commun à tous les joueurs, en 4 niveaux. Tout le monde répond aux mêmes questions : le classement est équitable.</div>';
+  html += '<div class="eyebrow">Ligues</div><h1 class="title">Rejoins une ligue</h1>';
+  html += '<div class="subtitle">Une ligue = un thème commun à tous les joueurs. Un test rapide évalue ton niveau, puis tu évolues par montées et descentes. Tout le monde répond aux mêmes questions : le classement est équitable.</div>';
   html += '<input class="answer-input" style="max-width:none;text-align:left;margin-bottom:14px;" id="league-search" placeholder="Rechercher un thème (ex : marketing)" oninput="App.searchLeagues(this.value)" autocomplete="off" autocapitalize="off" value="' + esc(state.themeQuery) + '"/>';
   html += '<div id="league-rows">' + leagueRowsHtml(state.themeQuery) + '</div>';
   html += '<button class="add-row" onclick="App.openProposal()">+ Proposer un thème</button>';
@@ -1026,7 +1075,10 @@ function renderMulti() {
   html += '<div class="mode-seg"><button class="mode-seg-b' + (ranked ? ' on' : '') + '" onclick="App.setArenaMode(\'ranked\')">Classé</button>'
     + '<button class="mode-seg-b' + (!ranked ? ' on' : '') + '" onclick="App.setArenaMode(\'friendly\')">Amical</button></div>';
   if (!joined.length) {
-    html += '<button class="arena-cta" onclick="App.openLeagues()"><span class="arena-cta-t">' + tabIcon(SWORDS) + 'Rejoindre une ligue</span><span class="arena-cta-s">Choisis un thème et un niveau pour combattre</span></button>';
+    html += '<button class="arena-cta" onclick="App.openLeagues()"><span class="arena-cta-t">' + tabIcon(SWORDS) + 'Rejoindre une ligue</span><span class="arena-cta-s">Un test rapide détermine ton niveau</span></button>';
+    const sug = suggestedThemes((state.profile.courses || []).map(normalize).concat(INTERESTS.filter(i => (state.meta.interests || []).includes(i.id)).map(i => normalize(i.label))));
+    if (sug.length) html += '<div class="rub-meta" style="margin:10px 4px 0;">Suggéré d\'après ton profil :</div><div class="chip-row" style="margin-top:6px;">'
+      + sug.map(id => '<button class="chip wide" onclick="App.startPlacement(\'' + id + '\')">' + esc(THEMES.find(t => t.id === id).label) + ' · passer le test</button>').join('') + '</div>';
   } else {
     html += '<button class="arena-cta" onclick="App.quickMatch()"><span class="arena-cta-t">' + tabIcon(SWORDS) + (ranked ? 'Entrer dans l\'arène' : 'Combat amical') + '</span>'
       + '<span class="arena-cta-s">' + (ranked ? 'Classé' : 'Sans points') + ' · ' + esc(leagueSummary) + '</span></button>';
@@ -1256,7 +1308,7 @@ function renderLeague() {
     + chk(el.rules, 'Règlement accepté') + chk(el.age, '16 ans ou plus')
     + '<div class="row" style="margin-top:10px;"><button class="btn ghost" onclick="App.openRules()">Voir le règlement ›</button></div></div>';
   html += '<div class="row" style="margin-top:12px;justify-content:space-between;"><button class="hidebtn" onclick="App.simulateSeason()">démo : simuler la fin de saison</button></div>';
-  html += '<div style="margin-top:14px;text-align:center;"><button class="hidebtn" onclick="App.joinLeague(\'' + id + '\')">quitter cette ligue</button></div>';
+  html += '<div style="margin-top:14px;text-align:center;"><button class="hidebtn" onclick="App.leaveLeague(\'' + id + '\')">quitter cette ligue</button></div>';
   html += '<div class="rub-meta" style="margin-top:12px;">Classement de démonstration : les autres joueurs sont fictifs.</div>';
   return html;
 }
@@ -1346,7 +1398,7 @@ function renderPitch() {
 
   html += pitchSection('2b', 'Multijoueur équitable : les ligues', pitchList([
     'Un duel sur <b>tes propres cartes</b> avantage celui dont les cartes sont jouées : impossible d\'en faire un classement juste.',
-    'Solution : des <b>ligues par thème</b> (marketing, anglais, gestion de projet…), chacune en 4 niveaux (facile, moyen, difficile, expert). Tout le monde répond aux <b>mêmes questions</b>, tirées d\'une banque commune.',
+    'Solution : des <b>ligues par thème</b> (marketing, anglais, gestion de projet…). Un <b>test de niveau</b> évalué par l\'IA place chaque joueur dans l\'un des 4 niveaux, puis il évolue par <b>montées et descentes</b>. Tout le monde répond aux <b>mêmes questions</b>, tirées d\'une banque commune.',
     'Les thèmes sont proposés par les utilisateurs, <b>validés par l\'équipe</b>, puis les questions sont préparées par l\'IA et relues.',
     '<b>Classé</b> (points de ligue, classement mensuel) ou <b>amical</b> (aucun point), plus un <b>salon d\'amis</b> pour jouer à plusieurs.',
     'Les lots sont débloqués à partir d\'un nombre minimal de joueurs (plus bas pour les niveaux difficiles) et gagnent en valeur quand la ligue est très active.',

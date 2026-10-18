@@ -6,7 +6,7 @@
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS, courseChoices, detectField, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze, MOOC_TOPICS } from './demo.js';
 import { eligibleDecks, startDuel, startRoom, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
-import { LEVELS, THEMES, parseLeague, leagueLabel, allLeagueIds, suggestedLeagues, leaguePlayers, dailyLeft, DAILY_CAP, settleSeason, ensureSeason, seasonKey } from './leagues.js';
+import { LEVELS, THEMES, parseLeague, leagueLabel, allLeagueIds, suggestedThemes, joinTheme, themeLeague, canRetest, placementItem, placementEstimate, placementReport, PLACEMENT_N, leaguePlayers, dailyLeft, DAILY_CAP, settleSeason, ensureSeason, seasonKey } from './leagues.js';
 import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
 import { render, friendResultsHtml, searchResultsHtml, leagueRowsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
@@ -155,6 +155,15 @@ function syncOnbInputs() {
   const x = g('onb-exam'); if (x !== null) o.exam = /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '';
   const ot = g('onb-other');
   if (ot !== null) { if (onbStep() === 'work') o.sectorOther = ot.slice(0, 60); else o.fieldOther = ot.slice(0, 60); }
+}
+
+// Prépare la question suivante du test de niveau, au niveau de difficulté courant.
+function nextPlacementQuestion() {
+  const pl = state.placement;
+  const it = placementItem(pl.theme, pl.idx, pl.used);
+  pl.used.push(it[0]);
+  const options = shuffle(it.slice(1));
+  pl.cur = { level: pl.idx, front: it[0], options, correct: options.indexOf(it[1]), ans: it[1] };
 }
 
 // Ligues cochées pour jouer (parmi celles rejointes) ; toutes les ligues rejointes par défaut.
@@ -613,14 +622,56 @@ window.App = {
   },
   allMultiLeagues() { state.multiLeagues = null; refresh(); },
   openLeagues() { stopDuel(); state.view = 'leagues'; state.dropOpen = null; refresh(); window.scrollTo(0, 0); },
-  joinLeague(id) {
+  // Quitter une ligue (on la rejoint uniquement via le test de niveau du thème).
+  leaveLeague(id) {
     if (!parseLeague(id)) return;
-    const j = state.multi.joined;
-    if (j.includes(id)) state.multi.joined = j.filter(x => x !== id); else state.multi.joined = j.concat(id);
-    state.multiLeagues = null; // la sélection repart de « toutes mes ligues »
-    if (!state.viewLeague || !state.multi.joined.includes(state.viewLeague)) state.viewLeague = state.multi.joined[0] || '';
+    state.multi.joined = state.multi.joined.filter(x => x !== id);
+    state.multiLeagues = null;
+    if (!state.multi.joined.includes(state.viewLeague)) state.viewLeague = state.multi.joined[0] || '';
     persist(); refresh();
   },
+  // ---- Test de niveau pour rejoindre un thème ----
+  startPlacement(themeId) {
+    if (!THEMES.some(t => t.id === themeId)) return;
+    if (!canRetest(themeId)) {
+      askConfirm({ title: 'Test indisponible', body: 'Tu as déjà joué des duels classés dans cette ligue ce mois-ci. Ton niveau évolue maintenant par montées et descentes ; tu pourras repasser le test à la prochaine saison.', label: '' });
+      return;
+    }
+    state.placement = { theme: themeId, phase: 'intro', step: 0, idx: 1, log: [], used: [], cur: null };
+    state.view = 'placement'; refresh(); window.scrollTo(0, 0);
+  },
+  placementBegin() { const pl = state.placement; if (!pl) return; pl.phase = 'q'; nextPlacementQuestion(); refresh(); },
+  placementAnswer(i) {
+    const pl = state.placement;
+    if (!pl || pl.phase !== 'q' || !pl.cur) return;
+    const ok = i >= 0 && i === pl.cur.correct;
+    pl.log.push({ level: pl.cur.level, correct: ok, front: pl.cur.front, ans: pl.cur.ans });
+    pl.idx = Math.max(0, Math.min(3, pl.idx + (ok ? 1 : -1)));
+    pl.step++;
+    if (pl.step >= PLACEMENT_N) {
+      pl.phase = 'loading';
+      refresh();
+      setTimeout(function () {
+        if (state.placement !== pl) return;
+        pl.estimate = placementEstimate(pl.log);
+        pl.report = placementReport(pl.theme, pl.log, pl.estimate);
+        pl.phase = 'result';
+        refresh();
+      }, 1700);
+    } else { nextPlacementQuestion(); refresh(); }
+  },
+  placementJoin(levelId) {
+    const pl = state.placement;
+    if (!pl) return;
+    const lid = levelId || LEVELS[pl.estimate].id;
+    const id = joinTheme(pl.theme, lid);
+    state.placement = null;
+    state.multiLeagues = null;
+    state.viewLeague = id;
+    persist();
+    state.view = 'league'; refresh(); window.scrollTo(0, 0);
+  },
+  cancelPlacement() { state.placement = null; state.view = 'leagues'; refresh(); window.scrollTo(0, 0); },
   // Pas de refresh() complet : il ferait perdre le focus de la barre de recherche.
   searchLeagues(q) {
     state.themeQuery = q;
@@ -921,9 +972,6 @@ window.App = {
       const have = state.decks.some(d => d.rubriqueId === rr.id && (normalize(d.name) === normalize(c) || (topic && topic === MOOC_TOPICS.find(x => x.test.test(normalize(d.name))))));
       if (!have) state.decks.push({ id: 'd-' + Date.now() + '-c' + k, name: c, rubriqueId: rr.id, speakLang: '', order: nextDeckOrder(rr.id, null) });
     });
-    // Ligues proposées d'après les matières et langues choisies (niveau moyen) : on les rejoint d'office.
-    const texts = o.courses.map(normalize).concat(INTERESTS.filter(i => o.interests.includes(i.id)).map(i => normalize(i.label)));
-    suggestedLeagues(texts).forEach(id => { if (!state.multi.joined.includes(id)) state.multi.joined.push(id); });
     // Hors études, les cours d'exemple de « Spécial Révisions » ne servent à rien : on les masque (réversible via Réorganiser).
     if (first && o.status && o.status !== 'student') {
       const ex = state.rubriques.find(r => r.id === 'r-revisions');
