@@ -952,10 +952,17 @@ export function leagueRowsHtml(query) {
       + LEVELS.map(function (l) {
         const id = t.id + ':' + l.id;
         const on = joined.includes(id);
-        return '<div class="lg-level"><div class="lg-lv"><b>' + l.label + '</b><span>' + pl(leaguePlayers(id), 'joueur') + ' · ×' + l.mult + ' points</span></div>' + prizeBadge(id)
+        return '<div class="lg-level"><div class="lg-lv"><b>' + l.label + '</b><span>' + pl(leaguePlayers(id), 'joueur') + '</span></div>' + prizeBadge(id)
           + '<button class="lg-join' + (on ? ' on' : '') + '" onclick="App.joinLeague(\'' + id + '\')">' + (on ? 'Rejoint ✓' : 'Rejoindre') + '</button></div>';
       }).join('') + '</div>';
   }).join('');
+}
+
+// Gros bouton d'accès au catalogue des ligues (hub et classement) : c'est le point d'entrée du multijoueur.
+function exploreButton() {
+  const n = THEMES.length * LEVELS.length;
+  return '<button class="explore-btn" onclick="App.openLeagues()"><span class="explore-ic">' + tabIcon('<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>') + '</span>'
+    + '<span class="explore-txt"><span class="explore-t">Explorer les ligues</span><span class="explore-s">' + n + ' ligues · ' + THEMES.length + ' thèmes · 4 niveaux</span></span><span class="chev">›</span></button>';
 }
 
 function renderLeagues() {
@@ -1006,6 +1013,7 @@ function renderMulti() {
       + '<span class="arena-cta-s">' + (ranked ? 'Classé' : 'Sans points') + ' · ' + esc(leagueSummary) + '</span></button>';
   }
   html += '<div class="rub-meta" style="margin:8px 4px 0;">' + (ranked ? 'Les points comptent pour le classement de la ligue tirée au sort.' : 'Pour t\'entraîner ou te tester : aucun point gagné ni perdu.') + '</div>';
+  html += exploreButton();
 
   html += '<div class="section-label">Préparer le combat</div>';
   const leagueItems = joined.map(id => ({ id, label: leagueLabel(id), count: pl(leaguePlayers(id), 'joueur'), state: play.includes(id) ? 'on' : 'off' }));
@@ -1161,20 +1169,27 @@ function renderLeague() {
   }
   const id = joined.includes(state.viewLeague) ? state.viewLeague : joined[0];
   const p = parseLeague(id);
-  const rows = standings(id);
+  const scope = state.leagueScope || 'general';
+  const rows = standings(id, scope);
   const mine = myLeagueStats(id);
   const pr = leaguePrize(id);
-  const rank = rows.findIndex(r => r.me) + 1;
+  const rank = standings(id, 'general').findIndex(r => r.me) + 1;
+  html += exploreButton();
   html += '<div class="onb-selectwrap" style="margin-bottom:12px;"><select class="onb-select" onchange="App.setViewLeague(this.value)">'
     + joined.map(j => '<option value="' + j + '"' + (j === id ? ' selected' : '') + '>' + esc(leagueLabel(j)) + '</option>').join('') + '</select></div>';
-  html += '<div class="lg-hero"><div class="lg-hero-t">' + esc(p.theme.label) + '</div><div class="lg-hero-l">' + p.level.label + ' · ×' + p.level.mult + ' points</div>'
-    + '<div class="arena-stats" style="margin-top:14px;"><div><b>' + fmtN(pr.players) + '</b><span>joueurs</span></div><div><b>' + rank + (rank === 1 ? 'er' : 'e') + '</b><span>ton rang</span></div><div><b>' + daysLeftInSeason() + '</b><span>' + (daysLeftInSeason() > 1 ? 'jours restants' : 'jour restant') + '</span></div></div></div>';
+  html += '<div class="lg-hero"><div class="lg-hero-t">' + esc(p.theme.label) + '</div><div class="lg-hero-l">Niveau ' + p.level.label + '</div>'
+    + '<div class="arena-stats" style="margin-top:14px;"><div><b>' + fmtN(pr.players) + '</b><span>joueurs</span></div><div><b>' + rank + (rank === 1 ? 'er' : 'e') + '</b><span>au général</span></div><div><b>' + daysLeftInSeason() + '</b><span>' + (daysLeftInSeason() > 1 ? 'jours restants' : 'jour restant') + '</span></div></div></div>';
   html += '<div class="prize-card"><span class="settings-ic">' + tabIcon('<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>') + '</span><div style="flex:1;min-width:0;">'
     + (pr.unlocked
       ? '<div class="mode-title">Lot de la saison : ' + esc(pr.prize) + '</div><div class="mode-desc">' + esc(pr.value) + ' (exemple) · pour le podium' + (pr.boosted ? ' · lot renforcé : ligue très active' : '') + '</div>'
       : '<div class="mode-title">Pas de lot pour l\'instant</div><div class="mode-desc">Il manque ' + fmtN(pr.missing) + ' joueurs pour débloquer « ' + esc(pr.prize) + ' » (seuil : ' + fmtN(pr.min) + ').</div>')
     + '<div class="goal-bar" style="margin-top:8px;"><div class="goal-fill" style="width:' + Math.min(100, Math.round(pr.players / pr.min * 100)) + '%;"></div></div></div></div>';
-  html += '<div class="rub-meta" style="margin:0 0 10px;">Classement du mois · victoire +' + Math.round(POINTS.win * p.level.mult) + ' pts, égalité +' + Math.round(POINTS.draw * p.level.mult) + ', défaite +' + Math.round(POINTS.loss * p.level.mult) + '. Seuls les duels classés comptent.</div>';
+  html += '<div class="chip-row" style="margin-bottom:10px;">' + [['general', '🌍 Général'], ['amis', '👥 Amis'], ['promo', '🎓 Promo']].map(function (x) {
+    return '<button class="chip wide' + (scope === x[0] ? ' sel' : '') + '" onclick="App.setLeagueScope(\'' + x[0] + '\')">' + x[1] + '</button>'; }).join('') + '</div>';
+  const friendRank = standings(id, 'amis').findIndex(r => r.me) + 1;
+  html += '<div class="rub-meta" style="margin:0 0 10px;">Classement du mois · victoire +' + POINTS.win + ' pts, égalité +' + POINTS.draw + ', défaite +' + POINTS.loss + '. Seuls les duels classés comptent.'
+    + (state.social.friends.length ? ' Parmi tes amis : ' + friendRank + (friendRank === 1 ? 'er' : 'e') + '.' : '') + '</div>';
+  if (scope === 'amis' && !state.social.friends.length) html += '<div class="rub-meta" style="margin-bottom:10px;">Ajoute des amis (onglet Amis) pour comparer vos places dans cette ligue.</div>';
   html += '<div class="settings-group">';
   rows.forEach(function (r, i) {
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
@@ -1182,7 +1197,7 @@ function renderLeague() {
       + '<span class="league-name">' + esc(r.name) + '</span><span class="league-pts">' + r.points + ' pts</span></div>';
   });
   html += '</div>';
-  html += '<div class="row" style="margin-top:14px;"><button class="btn ghost" onclick="App.openLeagues()">Explorer les ligues</button><button class="hidebtn" onclick="App.joinLeague(\'' + id + '\')">quitter cette ligue</button></div>';
+  html += '<div style="margin-top:14px;text-align:center;"><button class="hidebtn" onclick="App.joinLeague(\'' + id + '\')">quitter cette ligue</button></div>';
   html += '<div class="rub-meta" style="margin-top:12px;">Classement de démonstration : les autres joueurs sont fictifs.</div>';
   return html;
 }

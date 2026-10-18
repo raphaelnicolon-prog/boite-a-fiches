@@ -10,10 +10,11 @@
 // de joueurs et les classements viendraient d'un serveur. Ici, tout est simulé et déterministe.
 
 import { state } from './state.js';
-import { LEAGUE_BOTS } from './demo.js';
+import { LEAGUE_BOTS, PROMO_BOTS } from './demo.js';
 
-// Niveaux de difficulté. mult = multiplicateur de points de ligue ; minPlayers = nombre de joueurs
-// à partir duquel un lot est distribué (plus bas pour les ligues difficiles, qui sont plus petites).
+// Niveaux de difficulté. Chaque niveau est une ligue À PART, avec son propre classement : on affronte des joueurs
+// de même niveau. minPlayers = nombre de joueurs à partir duquel un lot est distribué (plus bas pour les ligues
+// difficiles, qui sont plus petites) ; la valeur du lot grimpe avec la difficulté.
 export const LEVELS = [
   { id: 'facile', label: 'Facile', mult: 1, minPlayers: 500, prize: 'Un mois de Premium offert', value: '≈ 5 €', skill: 1 },
   { id: 'moyen', label: 'Moyen', mult: 1.5, minPlayers: 300, prize: 'Un cours certifiant en ligne', value: '≈ 50 €', skill: 0.92 },
@@ -267,12 +268,19 @@ export function myLeagueStats(id) {
   return state.multi.leagues[id] || { points: 0, played: 0, wins: 0 };
 }
 
-// Classement de la saison pour une ligue : joueurs fictifs + toi. À égalité, tu passes devant.
-export function standings(id) {
-  const p = parseLeague(id);
-  const rows = LEAGUE_BOTS.map(function (b) {
-    const k = 0.6 + (hash(id + b.name) % 90) / 100;
-    return { name: b.name, points: Math.round(b.points * k * p.level.mult * 1.4), me: false };
+// Classement de la saison pour une ligue, dans un cercle : 'general' (tous les joueurs fictifs), 'amis' (tes amis)
+// ou 'promo' (une promo fictive). Toi inclus ; à égalité, tu passes devant.
+export function standings(id, scope) {
+  let base;
+  if (scope === 'amis') {
+    base = state.social.friends.map(function (name) {
+      const known = LEAGUE_BOTS.find(b => b.name === name);
+      return known || { name, points: 30 };
+    });
+  } else base = scope === 'promo' ? PROMO_BOTS : LEAGUE_BOTS;
+  const rows = base.map(function (b) {
+    const k = 0.6 + (hash(id + b.name) % 90) / 100; // le même joueur a les mêmes points dans tous les cercles
+    return { name: b.name, points: Math.round(b.points * k * 1.4), me: false };
   });
   const mine = myLeagueStats(id);
   rows.push({ name: state.profile.pseudo, points: mine.points, me: true });

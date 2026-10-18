@@ -579,3 +579,12 @@ h1.title.arena-result { font-size: 54px; letter-spacing: .1em; margin: 10px 0 4p
 .room-row { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; }
 .room-row b { font-variant-numeric: tabular-nums; color: var(--medley1); }
 .room-row.me b { color: var(--primary); }
+
+/* ---------- Bouton « Explorer les ligues » ---------- */
+.explore-btn { display: flex; align-items: center; gap: 14px; width: 100%; margin: 14px 0 6px; padding: 14px 16px; border-radius: 16px; border: 1.5px solid var(--primary); background: rgba(53, 205, 191, 0.1); color: var(--ink); font-family: inherit; text-align: left; cursor: pointer; }
+.explore-btn:active { transform: scale(.985); }
+.explore-ic { width: 44px; height: 44px; border-radius: 14px; background: var(--primary); color: #06222a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.explore-ic svg { width: 24px; height: 24px; }
+.explore-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.explore-t { font-size: 16.5px; font-weight: 800; }
+.explore-s { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }

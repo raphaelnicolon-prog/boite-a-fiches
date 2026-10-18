@@ -369,10 +369,10 @@ function endMatch() {
   const outcome = d.me.score > d.opp.score ? 'win' : d.me.score < d.opp.score ? 'loss' : 'draw';
   let gained = 0;
   let rank = 0;
-  // Seul un duel classé dans une ligue rapporte des points ; le multiplicateur dépend du niveau.
+  // Seul un duel classé dans une ligue rapporte des points (les mêmes dans toutes les ligues :
+  // chaque niveau a déjà son propre classement, inutile de les pondérer).
   if (d.ranked && d.leagueId) {
-    const lv = parseLeague(d.leagueId).level;
-    gained = Math.round(POINTS[outcome] * lv.mult);
+    gained = POINTS[outcome];
     const st = state.multi.leagues[d.leagueId] || { points: 0, played: 0, wins: 0 };
     st.points += gained; st.played++; if (outcome === 'win') st.wins++;
     state.multi.leagues[d.leagueId] = st;
