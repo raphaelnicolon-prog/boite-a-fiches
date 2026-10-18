@@ -414,3 +414,39 @@ textarea.answer-input { font-family: inherit; resize: vertical; }
 .dd-label { flex: 1; min-width: 0; }
 .dd-count { font-size: 12px; color: var(--ink-soft); }
 .deck-card.dragging { opacity: .9; z-index: 5; position: relative; }
+
+/* ---------- Accueil et création du profil ---------- */
+.onb { min-height: calc(100vh - 40px); min-height: calc(100dvh - 40px); display: flex; flex-direction: column; padding: 14px 4px 20px; max-width: 520px; margin: 0 auto; }
+.onb-top { display: flex; align-items: center; justify-content: space-between; min-height: 36px; }
+.onb-back { color: var(--ink-soft); font-size: 14px; font-weight: 600; background: none; border: none; padding: 8px 4px; cursor: pointer; font-family: inherit; }
+.onb-dots { display: flex; gap: 6px; }
+.onb-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: all .2s; }
+.onb-dots i.done { background: var(--ink-soft); }
+.onb-dots i.on { width: 22px; border-radius: 99px; background: var(--primary); }
+.onb-body { flex: 1; padding: 22px 0 18px; }
+.onb-hero { margin: 18px 0 26px; }
+.onb-brand { font-size: 34px; line-height: 1.05; }
+.onb-feat { display: flex; align-items: center; gap: 14px; background: var(--card); border-radius: 16px; padding: 14px 16px; margin-bottom: 10px; }
+.onb-ic { width: 40px; height: 40px; border-radius: 12px; background: rgba(53, 205, 191, 0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.onb-ic svg { width: 22px; height: 22px; }
+.onb-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin: 20px 0 8px; }
+.onb-opt { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 6px; opacity: .8; }
+.onb-input { width: 100%; background: var(--card); color: var(--ink); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px; font-size: 16px; font-family: inherit; }
+.onb-input:focus { outline: none; border-color: var(--primary); }
+.onb-avatars { display: flex; gap: 8px; flex-wrap: wrap; }
+.onb-av { width: 48px; height: 48px; border-radius: 14px; background: var(--card); font-size: 24px; border: 2px solid transparent; cursor: pointer; }
+.onb-av.sel { border-color: var(--primary); }
+.onb-note { font-size: 12.5px; line-height: 1.5; color: var(--ink-soft); margin-top: 16px; }
+.onb-error { color: var(--danger); font-size: 13px; font-weight: 600; margin-top: 12px; }
+.onb-goal { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--card); color: var(--ink); border: 2px solid transparent; border-radius: 16px; padding: 14px 16px; margin-bottom: 10px; cursor: pointer; font-family: inherit; }
+.onb-goal.sel { border-color: var(--primary); }
+.onb-goal > span:last-child { display: flex; flex-direction: column; }
+.onb-goal-n { font-family: ui-rounded, 'SF Pro Rounded', system-ui, sans-serif; font-size: 26px; font-weight: 800; width: 44px; text-align: center; color: var(--primary); }
+.onb-sum { display: flex; justify-content: space-between; gap: 16px; font-size: 13.5px; padding: 11px 0; border-top: 1px solid var(--border); }
+.onb-sum:first-of-type { margin-top: 14px; }
+.onb-sum span { color: var(--ink-soft); }
+.onb-sum b { font-weight: 600; text-align: right; }
+.onb-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.onb-cta { width: 100%; padding: 15px 16px; font-size: 16px; border-radius: 14px; }
+.onb-proto { font-size: 11px; color: var(--ink-soft); opacity: .7; margin-top: 6px; }
+#app:has(.onb) { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }

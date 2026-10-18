@@ -4,7 +4,7 @@
 
 import {
   state, MODES, SPEAK_LANGS, TRASH_DAYS, esc, colorVar, decksOf, cardsOf, dueCards, dueInRubrique,
-  scopedCards, scopedDue, selectedIds, childDecks, treeNodes, treeCards, dueTree, allDecksOf, deckPath, descendantIds, rootDeckId, allDueCards, seedData, GOAL_CHOICES, reviewedToday, currentStreak, normalize,
+  scopedCards, scopedDue, selectedIds, childDecks, treeNodes, treeCards, dueTree, allDecksOf, deckPath, descendantIds, rootDeckId, allDueCards, seedData, GOAL_CHOICES, INTERESTS, reviewedToday, currentStreak, normalize,
   aiLeft, FREE_AI_PER_DAY, badgeList, playerLevel, ensureWeek, daysLeftInWeek,
   weekSummary, masteryBreakdown, reminderDue, totalReviews, longestStreak, APP_VERSION
 } from './state.js';
@@ -30,6 +30,11 @@ const TAB_OF_VIEW = {
 
 export function render() {
   const app = document.getElementById('app');
+  if (state.onboard) {
+    app.innerHTML = renderOnboarding();
+    if (state.confirmDialog) app.insertAdjacentHTML('beforeend', renderConfirmDialog());
+    return;
+  }
   const screens = {
     home: renderHome, rubrique: renderRubrique, modes: renderModes, cards: renderCards, search: renderSearch,
     multi: renderMulti, league: renderLeague, friends: renderFriends, duel: renderDuel,
@@ -48,7 +53,6 @@ export function render() {
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
   if (state.showFeedback) app.insertAdjacentHTML('beforeend', renderFeedbackModal());
-  if (!state.meta.welcomed && state.view === 'home') app.insertAdjacentHTML('beforeend', renderWelcome());
   if (state.updateReady) app.insertAdjacentHTML('beforeend', '<div class="update-bar" onclick="location.reload()">✨ Nouvelle version disponible · toucher pour recharger</div>');
   // Toujours en dernier : la confirmation doit passer au-dessus de toute autre fenêtre.
   if (state.confirmDialog) app.insertAdjacentHTML('beforeend', renderConfirmDialog());
@@ -133,7 +137,7 @@ function renderSettings() {
   const rem = state.meta.reminder;
   let html = '<div class="eyebrow">Mon compte</div><h1 class="title">Profil</h1>';
   html += '<div class="profile-head tap" onclick="App.openProfile()">' + meAvatar(true)
-    + '<div style="flex:1;min-width:0;"><div class="profile-name">' + esc(state.profile.pseudo) + '</div><div class="rub-meta">Niveau ' + lv.level + ' · ' + totalReviews() + ' cartes révisées</div></div>'
+    + '<div style="flex:1;min-width:0;"><div class="profile-name">' + esc(state.profile.pseudo) + '</div><div class="rub-meta">' + (state.profile.email ? esc(state.profile.email) + ' · ' : '') + 'Niveau ' + lv.level + ' · ' + totalReviews() + ' cartes révisées</div></div>'
     + '<span class="stat-more" style="margin:0;">Modifier ›</span></div>';
 
   html += '<div class="section-label">Objectif et rappel</div>'
@@ -163,6 +167,7 @@ function renderSettings() {
 
   html += '<div class="section-label">À propos</div><div class="settings-group">'
     + settingsRow('📊', 'Présentation du projet', 'Modèle économique et feuille de route', 'App.openPitch()')
+    + settingsRow('👋', 'Revoir la présentation', 'Refaire l\'accueil et ton profil', 'App.startOnboarding()')
     + settingsRow('🎬', 'Charger les données de démo', 'Un jeu d\'exemple complet', 'App.loadDemo()')
     + '</div>';
   html += '<div class="rub-meta" style="margin-top:6px;text-align:center;">Boîte à Fiches · version ' + APP_VERSION + ' (prototype)</div>';
@@ -236,7 +241,7 @@ function renderHome() {
   html += '<button class="add-row" onclick="App.openAddRubrique()">+ Nouvelle rubrique</button>';
 
   if (!state.reorderMode) {
-    html += moocSection(recommendations(2), 'Recommandé pour toi');
+    html += moocSection(recommendations(3), 'Recommandé pour toi');
     html += '<div class="slim-card tap" style="margin-top:14px;" onclick="App.goTab(\'progress\')"><div style="flex:1;min-width:0;"><div class="mode-title">Newsletter</div>'
       + '<div class="mode-desc">Édition du ' + editionDate() + ' · ' + pl(articleFeed().length, 'article') + ' sélectionné' + (articleFeed().length > 1 ? 's' : '') + ' pour toi</div></div><span class="chev">›</span></div>';
   }
@@ -697,10 +702,24 @@ function aiButton(r) {
 // Choisit des cours en ligne d'après ce que la personne révise vraiment : les paquets qui
 // ont des cartes, les plus « à revoir » d'abord. keep = filtre facultatif sur les paquets.
 function recommendations(limit, keep) {
-  const decks = state.decks.filter(d => !d.parentId && treeCards(d.id).length > 0 && (!keep || keep(d)));
-  decks.sort((a, b) => dueTree(b.id).length - dueTree(a.id).length || treeCards(b.id).length - treeCards(a.id).length);
   const seen = new Set();
   const out = [];
+  // D'abord les centres d'intérêt déclarés à l'accueil (signal le plus direct), puis ce qu'on révise vraiment.
+  (state.meta.interests || []).forEach(function (id) {
+    if (out.length >= limit) return;
+    const it = INTERESTS.find(x => x.id === id);
+    if (!it) return;
+    const lang = MOOC_LANGS[id];
+    const t = lang ? { title: lang.title, desc: 'Cours de langue en ligne, du débutant au niveau avancé', query: lang.query, providers: ['coursera', 'futurelearn'] }
+      : MOOC_TOPICS.find(x => x.test.test(it.id));
+    if (!t || seen.has(t.title)) return;
+    if (keep && !keep({ id: '', rubriqueId: '', interest: true })) return;
+    seen.add(t.title);
+    const prov = MOOC_PROVIDERS[t.providers[out.length % t.providers.length]];
+    out.push({ provider: prov.name, title: t.title, desc: t.desc, url: prov.url(t.query), why: 'Parce que tu t\'intéresses à « ' + it.label + ' »' });
+  });
+  const decks = state.decks.filter(d => !d.parentId && treeCards(d.id).length > 0 && (!keep || keep(d)));
+  decks.sort((a, b) => dueTree(b.id).length - dueTree(a.id).length || treeCards(b.id).length - treeCards(a.id).length);
   decks.forEach(function (d) {
     if (out.length >= limit) return;
     const n = normalize(d.name);
@@ -1145,7 +1164,8 @@ function editionDate() {
 // Classe les articles d'après ce que la personne révise : les articles de langues remontent
 // si elle a des paquets de langue. À score égal, l'ordre tourne chaque jour (édition qui « vit »).
 function articleFeed() {
-  const hasLang = state.decks.some(function (d) {
+  const likesLang = (state.meta.interests || []).some(id => MOOC_LANGS[id]);
+  const hasLang = likesLang || state.decks.some(function (d) {
     if (!cardsOf(d.id).length) return false;
     const n = normalize(d.name);
     return !!d.speakLang || d.rubriqueId === 'r-langues' || MOOC_LANG_NAMES.some(l => l[0].test(n));
@@ -1209,17 +1229,65 @@ function sessionRecap() {
     + '<div class="goal-bar"><div class="goal-fill' + (done >= goal ? ' full' : '') + '" style="width:' + pct + '%;"></div></div></div>';
 }
 
-// ---------- ACCUEIL DE LA PREMIÈRE OUVERTURE ----------
-function renderWelcome() {
-  const named = state.profile.pseudo !== 'Toi' ? state.profile.pseudo : '';
-  return '<div class="modal-backdrop"><div class="modal">'
-    + '<div class="eyebrow">Bienvenue 👋</div>'
-    + '<div class="confirm-body">Boîte à Fiches t\'aide à réviser par petites sessions, avec des rappels espacés. Deux petits réglages pour commencer :</div>'
-    + '<label>Ton pseudo</label><input id="welcome-pseudo" maxlength="16" placeholder="ex : Raph" value="' + esc(named) + '" autocomplete="off"/>'
-    + '<label>Objectif quotidien (cartes par jour)</label><div class="row">'
-    + GOAL_CHOICES.map(function (n) { return '<button class="chip' + (state.stats.goal === n ? ' sel' : '') + '" id="wg-' + n + '" onclick="App.pickWelcomeGoal(' + n + ')">' + n + '</button>'; }).join('')
-    + '</div><div class="modal-actions"><button class="btn ghost" onclick="App.skipWelcome()">Plus tard</button><button class="btn" onclick="App.finishWelcome()">C\'est parti</button></div>'
-    + '</div></div>';
+// ---------- ACCUEIL ET CRÉATION DU PROFIL (première ouverture) ----------
+const AVATARS = ['🙂', '😎', '🦊', '🐼', '🚀', '🎧', '⚽', '📚'];
+const GOAL_TEXT = { 5: 'Une pause de 2 minutes', 10: 'Une révision tranquille', 20: 'Un bon rythme', 30: 'Le mode intensif' };
+
+function renderOnboarding() {
+  const o = state.onboard;
+  const last = o.step === 4;
+  let body = '';
+  if (o.step === 0) {
+    const feat = (icon, t, d) => '<div class="onb-feat"><span class="onb-ic">' + tabIcon(icon) + '</span><div><div class="mode-title">' + t + '</div><div class="mode-desc">' + d + '</div></div></div>';
+    body = '<div class="onb-hero"><div class="eyebrow">Bienvenue</div><h1 class="title onb-brand">La Boîte à Fiches</h1>'
+      + '<div class="subtitle">Révise mieux, par petites sessions.</div></div>'
+      + feat(TAB_ICONS.learn, 'Révise à ton rythme', 'Flashcards, QCM, textes à trous et appariement, avec des rappels espacés.')
+      + feat(TAB_ICONS.play, 'Défie tes amis', 'Duels, classement de la semaine et défi du jour.')
+      + feat(TAB_ICONS.progress, 'Vois tes progrès', 'Série de jours, niveau, badges et statistiques.');
+  } else if (o.step === 1) {
+    body = '<div class="eyebrow">Étape 1 sur 3</div><h1 class="title">Crée ton compte</h1>'
+      + '<div class="subtitle">Ton profil apparaît dans les duels et le classement.</div>'
+      + '<div class="onb-label">Choisis un avatar</div>'
+      + '<div class="onb-avatars">' + AVATARS.map(a => '<button class="onb-av' + (o.avatar === a ? ' sel' : '') + '" onclick="App.onbAvatar(\'' + a + '\')">' + a + '</button>').join('') + '</div>'
+      + '<label class="onb-label" for="onb-pseudo">Pseudo</label><input id="onb-pseudo" class="onb-input" maxlength="16" placeholder="ex : Raph" value="' + esc(o.pseudo) + '" autocomplete="off"/>'
+      + '<label class="onb-label" for="onb-email">E-mail <span class="onb-opt">facultatif</span></label><input id="onb-email" class="onb-input" type="email" inputmode="email" maxlength="80" placeholder="prenom@exemple.fr" value="' + esc(o.email) + '" autocomplete="off" autocapitalize="off"/>'
+      + (o.error ? '<div class="onb-error">' + esc(o.error) + '</div>' : '')
+      + '<div class="onb-note">Pas de mot de passe : dans la version en ligne, tu te connecteras avec un lien envoyé par e-mail. Pour l\'instant, ton profil est enregistré uniquement sur cet appareil.</div>';
+  } else if (o.step === 2) {
+    const group = g => '<div class="section-label">' + g + '</div><div class="chip-row">'
+      + INTERESTS.filter(i => i.group === g).map(i => '<button class="chip wide' + (o.interests.includes(i.id) ? ' sel' : '') + '" onclick="App.onbInterest(\'' + i.id + '\')">' + esc(i.label) + '</button>').join('') + '</div>';
+    body = '<div class="eyebrow">Étape 2 sur 3</div><h1 class="title">Que veux-tu apprendre ?</h1>'
+      + '<div class="subtitle">Choisis-en autant que tu veux. On s\'en sert pour te recommander des cours et des articles.</div>'
+      + group('Langues') + group('Matières');
+  } else if (o.step === 3) {
+    body = '<div class="eyebrow">Étape 3 sur 3</div><h1 class="title">Ton objectif</h1>'
+      + '<div class="subtitle">Combien de cartes veux-tu réviser par jour ?</div>'
+      + GOAL_CHOICES.map(n => '<button class="onb-goal' + (o.goal === n ? ' sel' : '') + '" onclick="App.onbGoal(' + n + ')"><span class="onb-goal-n">' + n + '</span><span><span class="mode-title">' + pl(n, 'carte') + ' par jour</span><span class="mode-desc">' + GOAL_TEXT[n] + '</span></span></button>').join('')
+      + '<div class="card" style="margin-top:14px;"><div class="row between"><div><div class="mode-title">Rappel quotidien</div><div class="mode-desc">Une bannière à l\'heure choisie</div></div>'
+      + '<button class="chip' + (o.remind ? ' sel' : '') + '" onclick="App.onbRemind()">' + (o.remind ? 'Activé' : 'Désactivé') + '</button></div>'
+      + (o.remind ? '<div class="row" style="margin-top:12px;"><span class="rub-meta" style="margin:0;">Heure</span><input type="time" class="time-input" value="' + esc(o.time) + '" onchange="App.onbTime(this.value)"/></div>' : '') + '</div>';
+  } else {
+    const langs = INTERESTS.filter(i => o.interests.includes(i.id)).map(i => esc(i.label));
+    body = '<div class="onb-hero"><div class="eyebrow">Terminé</div><h1 class="title">C\'est prêt, ' + esc(o.pseudo) + ' !</h1></div>'
+      + '<div class="stat-card"><div class="row"><div class="badge" style="width:56px;height:56px;font-size:28px;border-radius:16px;background:var(--card);">' + esc(o.avatar) + '</div>'
+      + '<div style="min-width:0;"><div class="profile-name">' + esc(o.pseudo) + '</div><div class="rub-meta">' + (o.email ? esc(o.email) : 'Compte sur cet appareil') + '</div></div></div>'
+      + '<div class="onb-sum"><span>Objectif</span><b>' + pl(o.goal, 'carte') + ' par jour</b></div>'
+      + '<div class="onb-sum"><span>Rappel</span><b>' + (o.remind ? 'à ' + esc(o.time) : 'désactivé') + '</b></div>'
+      + '<div class="onb-sum"><span>Centres d\'intérêt</span><b>' + (langs.length ? langs.join(', ') : 'aucun pour l\'instant') + '</b></div></div>'
+      + '<div class="onb-note">Tu pourras tout modifier dans l\'onglet Profil.</div>';
+  }
+  const dots = [0, 1, 2, 3, 4].map(i => '<i class="' + (i === o.step ? 'on' : i < o.step ? 'done' : '') + '"></i>').join('');
+  const primary = o.step === 0 ? 'Commencer' : last ? 'Commencer à réviser' : 'Continuer';
+  const act = last ? 'App.onbFinish(\'review\')' : 'App.onbNext()';
+  return '<div class="onb"><div class="onb-top">'
+    + (o.step > 0 ? '<button class="onb-back" onclick="App.onbBack()">‹ Retour</button>' : '<span></span>')
+    + '<div class="onb-dots">' + dots + '</div>'
+    + (o.step > 0 && !last ? '<button class="onb-back" onclick="App.skipWelcome()">Passer</button>' : '<span></span>') + '</div>'
+    + '<div class="onb-body">' + body + '</div>'
+    + '<div class="onb-foot"><button class="btn onb-cta" onclick="' + act + '">' + primary + '</button>'
+    + (o.step === 0 ? '<button class="link" onclick="App.onbLogin()">J\'ai déjà un compte</button>' : '')
+    + (last ? '<button class="link" onclick="App.onbFinish(\'home\')">Explorer l\'appli d\'abord</button>' : '')
+    + (o.step === 0 ? '<div class="onb-proto">Version prototype</div>' : '') + '</div></div>';
 }
 
 // ---------- AVIS ----------

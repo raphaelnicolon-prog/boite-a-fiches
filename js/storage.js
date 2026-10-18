@@ -5,7 +5,7 @@
 // Tant qu'on n'a pas ajouté de compte + synchronisation en ligne, tes fiches
 // créées sur ton téléphone ne se voient pas automatiquement sur ton ordinateur.
 
-import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES } from './state.js';
+import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES, INTERESTS } from './state.js';
 
 const STORAGE_KEY = 'boite-fiches-data-v1';
 
@@ -26,10 +26,11 @@ export function sanitizeStats(raw) {
 }
 
 export function sanitizeMeta(raw) {
-  const m = { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } };
+  const m = { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, interests: [], haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } };
   if (!raw || typeof raw !== 'object') return m;
   m.premium = raw.premium === true;
   m.welcomed = raw.welcomed === true;
+  if (Array.isArray(raw.interests)) m.interests = INTERESTS.map(i => i.id).filter(id => raw.interests.includes(id));
   m.haptics = raw.haptics !== false;
   if (typeof raw.dailyDone === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dailyDone)) m.dailyDone = raw.dailyDone;
   if (raw.reminder && typeof raw.reminder === 'object') {
@@ -44,11 +45,14 @@ export function sanitizeMeta(raw) {
   }
   return m;
 }
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export function sanitizeProfile(raw) {
-  const p = { pseudo: 'Toi', avatar: '🙂' };
+  const p = { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '' };
   if (!raw || typeof raw !== 'object') return p;
   if (typeof raw.pseudo === 'string' && raw.pseudo.trim().length >= 2 && raw.pseudo.trim().length <= 16) p.pseudo = raw.pseudo.trim();
   if (typeof raw.avatar === 'string' && raw.avatar.trim().length > 0 && raw.avatar.trim().length <= 8) p.avatar = raw.avatar.trim();
+  if (typeof raw.email === 'string' && EMAIL_RE.test(raw.email.trim()) && raw.email.trim().length <= 80) p.email = raw.email.trim();
+  if (typeof raw.createdAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.createdAt)) p.createdAt = raw.createdAt;
   return p;
 }
 export function sanitizeMulti(raw) {

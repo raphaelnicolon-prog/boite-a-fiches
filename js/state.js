@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '41';
+export const APP_VERSION = '42';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -55,8 +55,9 @@ export const state = {
   showBulk: false,
   trash: [],            // éléments supprimés récemment (voir app.js : corbeille de 30 jours)
   stats: { goal: 10, days: {} }, // objectif quotidien + nombre de cartes révisées par jour ('2026-10-15': 12)
-  meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
-  profile: { pseudo: 'Toi', avatar: '🙂' }, // pseudo et avatar affichés dans les duels et le classement
+  meta: { premium: false, aiDays: {}, aiTotal: 0, welcomed: false, interests: [], haptics: true, dailyDone: '', reminder: { on: false, time: '18:00' } }, // abonnement (démo), générations IA par jour, rappel quotidien
+  onboard: null,           // parcours d'accueil en cours (voir app.js) ; null = pas d'accueil affiché
+  profile: { pseudo: 'Toi', avatar: '🙂', email: '', createdAt: '' }, // pseudo et avatar affichés dans les duels et le classement
   showProfile: false,
   showFeedback: false,
   feedbackRating: 0,
@@ -275,6 +276,23 @@ export function scheduleCard(card, success) {
 
 // ---------- Statistiques : série de jours et objectif quotidien ----------
 export const GOAL_CHOICES = [5, 10, 20, 30];
+
+// Centres d'intérêt proposés à l'accueil (servent aux recommandations de cours et d'articles).
+// Les langues ont pour id le code de la voix ; les matières un mot-clé repris dans MOOC_TOPICS (demo.js).
+export const INTERESTS = [
+  { id: 'en-GB', label: 'Anglais', group: 'Langues' },
+  { id: 'es-ES', label: 'Espagnol', group: 'Langues' },
+  { id: 'it-IT', label: 'Italien', group: 'Langues' },
+  { id: 'de-DE', label: 'Allemand', group: 'Langues' },
+  { id: 'pt-PT', label: 'Portugais', group: 'Langues' },
+  { id: 'pl-PL', label: 'Polonais', group: 'Langues' },
+  { id: 'projet', label: 'Gestion de projet', group: 'Matières' },
+  { id: 'marketing', label: 'Marketing', group: 'Matières' },
+  { id: 'finance', label: 'Finance', group: 'Matières' },
+  { id: 'data', label: 'Données', group: 'Matières' },
+  { id: 'conseil', label: 'Conseil et stratégie', group: 'Matières' },
+  { id: 'innov', label: 'Innovation', group: 'Matières' }
+];
 
 // Compte une carte révisée aujourd'hui (appelée à chaque réponse enregistrée).
 function recordReview() {

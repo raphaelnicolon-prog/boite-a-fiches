@@ -3,10 +3,10 @@
 // Une méthode App typique fait 3 choses dans l'ordre : 1) modifier state,
 // 2) sauvegarder si besoin (persist), 3) redessiner l'écran (refresh).
 
-import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
+import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze } from './demo.js';
 import { eligibleDecks, startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
-import { loadData, persist, buildBackupJson, parseBackup } from './storage.js';
+import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
 import { render, friendResultsHtml, searchResultsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
 
@@ -122,6 +122,20 @@ function sendToTrash(type, name, payload) {
     id: 't-' + Date.now() + '-' + Math.floor(Math.random() * 10000),
     type, name, deletedAt: new Date().toISOString(), payload
   });
+}
+
+// État de départ du parcours d'accueil (rejoué = on part du profil actuel).
+function makeOnboard(replay) {
+  return { step: 0, replay, error: '', pseudo: state.profile.pseudo !== 'Toi' ? state.profile.pseudo : '', avatar: state.profile.avatar,
+    email: state.profile.email || '', goal: state.stats.goal, interests: (state.meta.interests || []).slice(),
+    remind: state.meta.reminder.on, time: state.meta.reminder.time };
+}
+// Recopie dans l'état ce qui a été tapé dans les champs (on ne rafraîchit pas à chaque lettre).
+function syncOnbInputs() {
+  const o = state.onboard;
+  if (!o) return;
+  const p = document.getElementById('onb-pseudo'); if (p) o.pseudo = p.value.trim();
+  const e = document.getElementById('onb-email'); if (e) o.email = e.value.trim();
 }
 
 // Modes à une carte à la fois cochés pour le Medley (l'appariement est géré à part).
@@ -324,7 +338,7 @@ window.App = {
         const d = demoDataset();
         state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
         state.stats = d.stats; state.multi = d.multi; state.social = d.social;
-        state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, haptics: state.meta.haptics, reminder: state.meta.reminder };
+        state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, interests: state.meta.interests || [], haptics: state.meta.haptics, reminder: state.meta.reminder };
         state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
         persist(); refresh();
       }
@@ -604,20 +618,58 @@ window.App = {
   toggleArticle(i) { state.openArticle = state.openArticle === i ? null : i; refresh(); },
 
   // ---- Accueil de la première ouverture ----
-  // Pas de refresh() sur le choix de l'objectif : il effacerait le pseudo déjà tapé.
-  pickWelcomeGoal(n) {
-    if (!GOAL_CHOICES.includes(n)) return;
-    state.stats.goal = n;
-    GOAL_CHOICES.forEach(g => { const el = document.getElementById('wg-' + g); if (el) el.classList.toggle('sel', g === n); });
+  // Parcours d'accueil en 5 écrans : présentation, compte, centres d'intérêt, objectif, récapitulatif.
+  // Le « compte » est un profil enregistré sur l'appareil (aucun serveur dans cette version).
+  startOnboarding() { state.onboard = makeOnboard(true); state.view = 'home'; refresh(); window.scrollTo(0, 0); },
+  onbNext() {
+    const o = state.onboard;
+    if (!o) return;
+    syncOnbInputs();
+    if (o.step === 1) {
+      if (o.pseudo.length < 2 || o.pseudo.length > 16) { o.error = 'Ton pseudo doit faire entre 2 et 16 caractères.'; refresh(); return; }
+      if (o.email && !EMAIL_RE.test(o.email)) { o.error = 'Cette adresse e-mail ne semble pas valide (ou laisse le champ vide).'; refresh(); return; }
+    }
+    o.error = '';
+    o.step = Math.min(o.step + 1, 4);
+    refresh(); window.scrollTo(0, 0);
   },
-  finishWelcome() {
-    const input = document.getElementById('welcome-pseudo');
-    const pseudo = input ? input.value.trim() : '';
-    if (pseudo.length >= 2 && pseudo.length <= 16) state.profile.pseudo = pseudo;
-    state.meta.welcomed = true;
-    persist(); refresh();
+  onbBack() { const o = state.onboard; if (!o || o.step === 0) return; syncOnbInputs(); o.error = ''; o.step--; refresh(); window.scrollTo(0, 0); },
+  onbAvatar(e) { syncOnbInputs(); state.onboard.avatar = e; refresh(); },
+  onbInterest(id) {
+    syncOnbInputs();
+    const o = state.onboard;
+    o.interests = o.interests.includes(id) ? o.interests.filter(x => x !== id) : o.interests.concat(id);
+    refresh();
   },
-  skipWelcome() { state.meta.welcomed = true; persist(); refresh(); },
+  onbGoal(n) { if (GOAL_CHOICES.includes(n)) { state.onboard.goal = n; refresh(); } },
+  onbRemind() { state.onboard.remind = !state.onboard.remind; refresh(); },
+  onbTime(v) { if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) state.onboard.time = v; },
+  onbLogin() {
+    askConfirm({ title: 'Connexion en ligne', body: 'Prototype : il n\'y a pas encore de serveur. Les comptes en ligne (connexion, synchronisation entre appareils) font partie de la phase 2. Crée ton profil : il reste sur cet appareil.', label: '' });
+  },
+  // Applique les choix de l'accueil. go = 'review' pour enchaîner sur une première révision.
+  onbFinish(go) {
+    const o = state.onboard;
+    if (!o) return;
+    state.profile.pseudo = o.pseudo || state.profile.pseudo;
+    state.profile.avatar = o.avatar || state.profile.avatar;
+    state.profile.email = o.email || '';
+    if (!state.profile.createdAt) state.profile.createdAt = todayStr();
+    state.stats.goal = o.goal;
+    state.meta.reminder.on = o.remind; state.meta.reminder.time = o.time;
+    state.meta.interests = INTERESTS.map(i => i.id).filter(id => o.interests.includes(id));
+    // Une langue choisie qui n'a pas encore de paquet : on en prépare un (vide) dans « Spécial Langues ».
+    const lr = state.rubriques.find(r => r.id === 'r-langues');
+    if (lr) INTERESTS.filter(i => i.group === 'Langues' && o.interests.includes(i.id)).forEach(function (i) {
+      const have = state.decks.some(d => d.rubriqueId === lr.id && (d.speakLang === i.id || normalize(d.name) === normalize(i.label)));
+      if (!have) state.decks.push({ id: 'd-' + Date.now() + '-' + i.id.slice(0, 2), name: i.label, rubriqueId: lr.id, speakLang: i.id, order: nextDeckOrder(lr.id, null) });
+    });
+    state.meta.welcomed = true; state.onboard = null;
+    persist();
+    if (go === 'review' && allDueCards().length > 0) this.startFlash(null, null, 'all-due');
+    else { state.view = 'home'; refresh(); window.scrollTo(0, 0); }
+  },
+  skipWelcome() { state.meta.welcomed = true; state.onboard = null; persist(); refresh(); },
 
   // ---- Partage et avis ----
   async shareApp() {
@@ -1022,6 +1074,7 @@ window.addEventListener('offline', syncOfflinePill);
 
 // ---- Démarrage de l'appli ----
 loadData();
+if (!state.meta.welcomed) state.onboard = makeOnboard(false);
 // Demande au navigateur de ne pas effacer nos données quand il manque de place
 // (pas garanti partout, mais ça réduit le risque).
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* pas grave */ }
