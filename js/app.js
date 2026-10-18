@@ -6,7 +6,7 @@
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS, courseChoices, detectField, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze, MOOC_TOPICS } from './demo.js';
 import { eligibleDecks, startDuel, startRoom, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
-import { LEVELS, THEMES, parseLeague, leagueLabel, allLeagueIds, suggestedLeagues, leaguePlayers } from './leagues.js';
+import { LEVELS, THEMES, parseLeague, leagueLabel, allLeagueIds, suggestedLeagues, leaguePlayers, dailyLeft, DAILY_CAP, settleSeason, ensureSeason, seasonKey } from './leagues.js';
 import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
 import { render, friendResultsHtml, searchResultsHtml, leagueRowsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
@@ -204,10 +204,16 @@ window.App = {
   openMulti() { stopDuel(); state.view = 'multi'; refresh(); },
   // « Entrer dans l'arène » : une ligue tirée au hasard parmi celles cochées. Classé = points de ligue ; amical = sans points.
   quickMatch() {
-    const ids = playableLeagues();
+    let ids = playableLeagues();
     if (!ids.length) { this.openLeagues(); return; }
+    const ranked = state.arenaMode === 'ranked';
+    // Plafond : 10 duels classés par jour et par ligue. Les ligues qui l'ont atteint sont écartées du tirage.
+    if (ranked) {
+      ids = ids.filter(id => dailyLeft(id) > 0);
+      if (!ids.length) { askConfirm({ title: 'Plafond du jour atteint', body: 'Tu as joué ' + DAILY_CAP + ' duels classés aujourd\'hui dans chacune des ligues cochées. Reviens demain, ou passe en mode « Amical » (sans points) pour continuer à t\'entraîner.', label: '' }); return; }
+    }
     state.view = 'duel';
-    startDuel({ league: ids[Math.floor(Math.random() * ids.length)], ranked: state.arenaMode === 'ranked' });
+    startDuel({ league: ids[Math.floor(Math.random() * ids.length)], ranked });
   },
   // Entraînement : le duel d'avant, sur tes propres cartes, sans points.
   trainOwn() { state.view = 'duel'; startDuel({}); },
@@ -225,7 +231,12 @@ window.App = {
     const d = state.duel;
     if (!d) return;
     if (d.room) { startRoom({ league: d.leagueId, mode: d.mode, players: d.others }); return; }
-    startDuel({ opponent: d.opponent, deckId: d.deckId, league: d.leagueId, ranked: d.ranked, mode: d.mode, skipSearch: true });
+    let ranked = d.ranked;
+    if (ranked && dailyLeft(d.leagueId) <= 0) {
+      ranked = false;
+      askConfirm({ title: 'Plafond du jour atteint', body: 'Tu as joué ' + DAILY_CAP + ' duels classés aujourd\'hui dans cette ligue. Cette revanche est jouée en amical, sans points.', label: '' });
+    }
+    startDuel({ opponent: d.opponent, deckId: d.deckId, league: d.leagueId, ranked, mode: d.mode, count: d.count, skipSearch: true });
   },
   openLeague() { stopDuel(); state.view = 'league'; refresh(); },
   openFriends() { stopDuel(); state.view = 'friends'; state.friendQuery = ''; refresh(); },
@@ -376,7 +387,7 @@ window.App = {
         const d = demoDataset();
         state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
         state.stats = d.stats; state.multi = d.multi; state.social = d.social;
-        state.multi.joined = ['marketing:moyen', 'anglais:facile', 'projet:moyen']; state.multi.leagues = { 'marketing:moyen': { points: 60, played: 3, wins: 2 } }; state.multi.seasonKey = ''; state.multi.proposals = [];
+        state.multi.joined = ['marketing:moyen', 'anglais:facile', 'projet:moyen']; state.multi.leagues = { 'marketing:moyen': { points: 60, played: 3, wins: 2 } }; state.multi.plays = { date: '', counts: {} }; state.multi.moves = []; state.multi.eligible = { rules: false, age: false }; state.multi.reports = []; state.multi.seasonKey = seasonKey(); state.multi.proposals = [];
         state.multiLeagues = null;
         state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, interests: state.meta.interests || [], haptics: state.meta.haptics, reminder: state.meta.reminder };
         state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
@@ -586,6 +597,12 @@ window.App = {
     state.multiModes = ['medley', 'qcm', 'vf', 'match'].filter(x => cur.has(x));
     refresh();
   },
+  toggleMultiLength(n) {
+    const cur = new Set(state.multiLengths);
+    if (cur.has(n)) { if (cur.size === 1) return; cur.delete(n); } else cur.add(n);
+    state.multiLengths = [3, 5, 8, 10].filter(x => cur.has(x));
+    refresh();
+  },
   // ---- Ligues (thèmes communs à tous les joueurs, par niveau) ----
   toggleMultiLeague(id) {
     const joined = state.multi.joined.slice();
@@ -620,6 +637,76 @@ window.App = {
     state.showProposal = false;
     persist(); refresh();
   },
+
+  // Signaler une question de la banque (réponse douteuse, énoncé flou…) : elle part à la relecture de l'équipe.
+  reportQuestion() {
+    const d = state.duel;
+    if (!d || !d.q || d.q.reported) return;
+    const qu = d.questions[d.index];
+    if (!qu || !qu.ans) return;
+    const line = (d.leagueId ? leagueLabel(d.leagueId) + ' : ' : '') + qu.front;
+    state.multi.reports = [line].concat(state.multi.reports.filter(x => x !== line)).slice(0, 30);
+    d.q.reported = true;
+    persist(); refresh();
+  },
+  // Après un duel : les questions ratées deviennent des cartes personnelles, rangées dans un paquet du thème.
+  addMissed() {
+    const d = state.duel;
+    if (!d || !d.missed || !d.missed.length || d.missedAdded) return;
+    const theme = d.leagueId ? parseLeague(d.leagueId).theme.label : 'Quiz';
+    const name = 'Quiz · ' + theme;
+    const student = state.profile.status === 'student' || !state.profile.status;
+    let rub = state.rubriques.find(r => r.id === (student ? 'r-revisions' : 'r-sujets'));
+    if (!rub) {
+      rub = { id: 'r-sujets', name: 'Mes sujets', emoji: '🎯', color: 'gold', order: Math.max(-1, ...state.rubriques.map(r => r.order)) + 1, hidden: false, isDefault: false };
+      state.rubriques.push(rub);
+    }
+    let deck = state.decks.find(x => x.rubriqueId === rub.id && !x.parentId && x.name === name);
+    if (!deck) {
+      deck = { id: 'd-' + Date.now(), name, rubriqueId: rub.id, speakLang: '', order: nextDeckOrder(rub.id, null) };
+      state.decks.push(deck);
+    }
+    const have = new Set(cardsOf(deck.id).map(c => normalize(c.front)));
+    let added = 0;
+    const stamp = Date.now();
+    d.missed.forEach(function (m, i) {
+      if (have.has(normalize(m.front))) return;
+      have.add(normalize(m.front));
+      state.cards.push({ id: 'c-' + stamp + '-m' + i, deckId: deck.id, front: m.front, back: m.back, box: 0, nextReview: todayStr() });
+      added++;
+    });
+    d.missedAdded = { deckId: deck.id, name, added };
+    persist(); refresh();
+  },
+  openMissedDeck() {
+    const d = state.duel;
+    if (!d || !d.missedAdded) return;
+    const id = d.missedAdded.deckId;
+    stopDuel();
+    this.openDeck(id);
+  },
+  // Règlement des lots et conditions d'éligibilité (modèle à faire valider par un juriste).
+  openRules() { stopDuel(); state.view = 'rules'; refresh(); window.scrollTo(0, 0); },
+  toggleEligible(key) {
+    if (key !== 'rules' && key !== 'age') return;
+    state.multi.eligible[key] = !state.multi.eligible[key];
+    persist(); refresh();
+  },
+  // Démo : simule la fin de saison pour montrer la montée / la descente (en vrai, elle a lieu chaque mois).
+  simulateSeason() {
+    const id = state.viewLeague || state.multi.joined[0];
+    if (!id || !state.multi.joined.includes(id)) return;
+    ensureSeason();
+    const mv = settleSeason(id);
+    if (mv.kind === 'idle') {
+      askConfirm({ title: 'Pas encore éligible', body: 'Il faut avoir joué au moins ' + 3 + ' duels classés dans la saison pour monter ou descendre. Il t\'en manque ' + mv.need + '.', label: '' });
+    } else {
+      state.viewLeague = mv.to;
+      state.multiLeagues = null;
+    }
+    persist(); refresh();
+  },
+  dismissMove(i) { state.multi.moves.splice(i, 1); persist(); refresh(); },
 
   // ---- Salon d'amis : un combat amical à plusieurs, sans points ----
   openRoom() {

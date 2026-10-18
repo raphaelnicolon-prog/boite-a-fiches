@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '48';
+export const APP_VERSION = '49';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -63,7 +63,7 @@ export const state = {
   feedbackRating: 0,
   openArticle: null,       // article ouvert dans « Découvrir »
   updateReady: false,      // une nouvelle version de l'appli est prête (voir app.js)
-  multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0, joined: [], leagues: {}, seasonKey: '', proposals: [] }, // points d'arène + ligues rejointes (par thème et niveau)
+  multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0, joined: [], leagues: {}, seasonKey: '', proposals: [], plays: { date: '', counts: {} }, moves: [], eligible: { rules: false, age: false }, reports: [] }, // points d'arène + ligues rejointes (par thème et niveau)
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
   createRubriqueId: null, // rubrique choisie dans l'onglet « Créer »
@@ -74,6 +74,7 @@ export const state = {
   themeQuery: '',        // recherche dans le catalogue des ligues
   multiLeagues: null,    // ligues cochées pour jouer : null = toutes celles rejointes, sinon liste d'identifiants
   multiModes: ['medley', 'qcm', 'vf'], // formats de duel cochés (un est tiré au hasard)
+  multiLengths: [5],     // nombres de questions acceptés (un est tiré au hasard)
   arenaMode: 'ranked',   // 'ranked' (points de ligue) ou 'friendly' (combat amical, sans points)
   room: null,            // salon d'amis en préparation (voir app.js)
   viewLeague: '',        // ligue affichée dans l'onglet Ligue

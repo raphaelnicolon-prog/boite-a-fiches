@@ -71,7 +71,7 @@ export function sanitizeProfile(raw) {
   return p;
 }
 export function sanitizeMulti(raw) {
-  const m = { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0, joined: [], leagues: {}, seasonKey: '', proposals: [] };
+  const m = { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0, joined: [], leagues: {}, seasonKey: '', proposals: [], plays: { date: '', counts: {} }, moves: [], eligible: { rules: false, age: false }, reports: [] };
   if (!raw || typeof raw !== 'object') return m;
   ['weekPoints', 'total', 'played', 'wins'].forEach(k => { if (Number.isInteger(raw[k]) && raw[k] >= 0) m[k] = raw[k]; });
   if (typeof raw.weekKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.weekKey)) m.weekKey = raw.weekKey;
@@ -84,6 +84,13 @@ export function sanitizeMulti(raw) {
       if (valid.has(id) && l && Number.isInteger(l.points) && l.points >= 0) m.leagues[id] = { points: l.points, played: Number.isInteger(l.played) && l.played >= 0 ? l.played : 0, wins: Number.isInteger(l.wins) && l.wins >= 0 ? l.wins : 0 };
     });
   }
+  if (raw.plays && typeof raw.plays === 'object' && /^\d{4}-\d{2}-\d{2}$/.test(raw.plays.date) && raw.plays.counts && typeof raw.plays.counts === 'object') {
+    m.plays.date = raw.plays.date;
+    Object.keys(raw.plays.counts).forEach(id => { if (valid.has(id) && Number.isInteger(raw.plays.counts[id]) && raw.plays.counts[id] >= 0) m.plays.counts[id] = raw.plays.counts[id]; });
+  }
+  if (Array.isArray(raw.moves)) m.moves = raw.moves.filter(x => x && valid.has(x.from) && valid.has(x.to) && ['up', 'down', 'stay'].includes(x.kind)).map(x => ({ kind: x.kind, from: x.from, to: x.to, rank: Number.isInteger(x.rank) ? x.rank : 0 })).slice(0, 5);
+  if (raw.eligible && typeof raw.eligible === 'object') { m.eligible.rules = raw.eligible.rules === true; m.eligible.age = raw.eligible.age === true; }
+  if (Array.isArray(raw.reports)) m.reports = raw.reports.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim().slice(0, 140)).slice(0, 30);
   if (Array.isArray(raw.proposals)) m.proposals = raw.proposals.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim().slice(0, 60)).slice(0, 5);
   return m;
 }

@@ -9,7 +9,7 @@
 // serait générée par une IA puis relue par l'équipe (voir « Le projet »), et les ligues, le nombre
 // de joueurs et les classements viendraient d'un serveur. Ici, tout est simulé et déterministe.
 
-import { state } from './state.js';
+import { state, todayStr } from './state.js';
 import { LEAGUE_BOTS, PROMO_BOTS } from './demo.js';
 
 // Niveaux de difficulté. Chaque niveau est une ligue À PART, avec son propre classement : on affronte des joueurs
@@ -259,9 +259,65 @@ export function daysLeftInSeason() {
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
   return Math.max(1, Math.ceil((end - d) / 86400000));
 }
+// ---- Plafond quotidien : 10 duels classés par ligue et par jour (limite le « farming » de points) ----
+export const DAILY_CAP = 10;
+export function ensureDay() {
+  const p = state.multi.plays;
+  if (p.date !== todayStr()) { p.date = todayStr(); p.counts = {}; }
+}
+export function dailyPlayed(id) {
+  ensureDay();
+  return state.multi.plays.counts[id] || 0;
+}
+export function dailyLeft(id) { return Math.max(0, DAILY_CAP - dailyPlayed(id)); }
+export function addDailyPlay(id) {
+  ensureDay();
+  state.multi.plays.counts[id] = dailyPlayed(id) + 1;
+}
+
+// ---- Montée et descente (classement) ----
+// Fin de saison : les 3 premiers de la ligue montent d'un niveau, les 3 derniers descendent (sauf aux extrémités).
+// Il faut avoir joué au moins MIN_PLAYED duels classés dans la saison pour être concerné.
+export const ZONE = 3;
+export const MIN_PLAYED = 3;
+export function levelStep(id, delta) {
+  const p = parseLeague(id);
+  if (!p) return null;
+  const i = LEVELS.findIndex(l => l.id === p.level.id) + delta;
+  return i >= 0 && i < LEVELS.length ? p.theme.id + ':' + LEVELS[i].id : null;
+}
+// Situation actuelle dans une ligue : 'up' (zone de montée), 'down' (zone de descente) ou 'stay'.
+export function zoneOf(id) {
+  const rows = standings(id, 'general');
+  const rank = rows.findIndex(r => r.me) + 1;
+  if (rank <= ZONE && levelStep(id, 1)) return { zone: 'up', rank, to: levelStep(id, 1) };
+  if (rank > rows.length - ZONE && levelStep(id, -1)) return { zone: 'down', rank, to: levelStep(id, -1) };
+  return { zone: 'stay', rank, to: null };
+}
+// Applique la montée ou la descente d'une ligue : on quitte l'ancienne, on rejoint la nouvelle. Renvoie le mouvement.
+export function settleSeason(id) {
+  const st = myLeagueStats(id);
+  if (st.played < MIN_PLAYED) return { kind: 'idle', from: id, to: id, need: MIN_PLAYED - st.played };
+  const z = zoneOf(id);
+  const m = state.multi;
+  const move = { kind: z.zone === 'up' ? 'up' : z.zone === 'down' ? 'down' : 'stay', from: id, to: z.to || id, rank: z.rank };
+  if (z.to) {
+    m.joined = m.joined.filter(x => x !== id);
+    if (!m.joined.includes(z.to)) m.joined.push(z.to);
+  }
+  m.leagues[id] = { points: 0, played: 0, wins: 0 };
+  m.moves = [move].concat(m.moves).slice(0, 5);
+  return move;
+}
 export function ensureSeason() {
   const m = state.multi;
-  if (m.seasonKey !== seasonKey()) { m.seasonKey = seasonKey(); m.leagues = {}; }
+  if (m.seasonKey !== seasonKey()) {
+    // Nouvelle saison : on règle d'abord la saison écoulée (montées et descentes), puis on remet les points à zéro.
+    const old = m.seasonKey;
+    m.seasonKey = seasonKey(); // posé avant, pour que les calculs ci-dessous ne relancent pas ensureSeason
+    if (old) m.joined.slice().forEach(function (id) { if ((m.leagues[id] || {}).played >= MIN_PLAYED) settleSeason(id); });
+    m.leagues = {};
+  }
 }
 export function myLeagueStats(id) {
   ensureSeason();
