@@ -10,17 +10,17 @@
 //   - match  : course d'appariement, 3 manches de 4 paires à relier
 //   - medley : enchaîne QCM, vrai/faux, phrase à trous et appariement
 
-import { state, shuffle, ensureWeek, todayStr, treeCards, rootDeckId } from './state.js';
+import { state, shuffle, ensureWeek, todayStr, treeCards } from './state.js';
 import { persist } from './storage.js';
-import { DEMO_PEOPLE, LEAGUE_BOTS, PROMO_BOTS } from './demo.js';
+import { DEMO_PEOPLE } from './demo.js';
+import { LEVELS, parseLeague, leagueLabel, leagueItems, ensureSeason, standings } from './leagues.js';
 
 export const POINTS = { win: 50, draw: 25, loss: 15 };
 
 export const DUEL_MODES = [
-  { id: 'medley', emoji: '🎲', label: 'Medley', desc: 'QCM, vrai/faux et phrases à trous enchaînés' },
+  { id: 'medley', emoji: '🎲', label: 'Medley', desc: 'QCM et vrai/faux enchaînés' },
   { id: 'qcm', emoji: '🧠', label: 'QCM', desc: '5 questions à 4 choix' },
-  { id: 'vf', emoji: '✅', label: 'Vrai/Faux', desc: '6 affirmations en rafale' },
-  { id: 'match', emoji: '🔗', label: 'Appariement', desc: 'Relie 4 paires plus vite que ton adversaire' }
+  { id: 'vf', emoji: '✅', label: 'Vrai/Faux', desc: '6 affirmations en rafale' }
 ];
 
 const QTIME = { qcm: 10, cloze: 12, vf: 6, match: 25 };
@@ -29,6 +29,7 @@ let tickTimer = null;
 let botTimer = null;
 let nextTimer = null;
 let stepTimers = [];
+let roomTimers = [];
 let refreshFn = function () {};
 
 export function setRefresh(fn) { refreshFn = fn; }
@@ -40,6 +41,8 @@ function clearAll() {
   stepTimers.forEach(clearTimeout);
   tickTimer = botTimer = nextTimer = null;
   stepTimers = [];
+  roomTimers.forEach(clearTimeout);
+  roomTimers = [];
 }
 
 // Appelée dès qu'on quitte l'écran de duel : coupe tous les chronomètres.
@@ -53,32 +56,35 @@ export function eligibleDecks() {
   return state.decks.filter(d => treeCards(d.id).length >= 4);
 }
 
-// Lance la mise en relation, puis la partie. 'opponent' = null pour une partie rapide
-// (adversaire tiré au hasard parmi les joueurs « en ligne »), ou un ami à défier.
+// Lance la mise en relation, puis la partie.
+// opts.league : identifiant de ligue ('marketing:moyen') -> questions communes à tous les joueurs ;
+//   sans ligue, le duel est un entraînement sur tes propres cartes (opts.deckId ou paquet au hasard).
+// opts.ranked : les points comptent pour la ligue (sinon combat amical : aucun point).
+// opts.opponent : un ami à défier ; sinon adversaire tiré au hasard parmi les joueurs « en ligne ».
 export function startDuel(opts) {
   clearAll();
-  const decks = eligibleDecks();
-  if (decks.length === 0) {
-    state.duel = { phase: 'nodeck' };
-    refreshFn();
-    return;
+  opts = opts || {};
+  let deck = null;
+  if (!opts.league) {
+    const decks = eligibleDecks();
+    if (decks.length === 0) {
+      state.duel = { phase: 'nodeck' };
+      refreshFn();
+      return;
+    }
+    deck = (opts.deckId && decks.find(d => d.id === opts.deckId)) || decks[Math.floor(Math.random() * decks.length)];
   }
-  // Thème : celui demandé, sinon celui choisi dans l'écran Jouer, sinon un paquet au hasard.
-  const wanted = opts && opts.deckId;
-  const checked = opts && opts.daily ? null : state.multiThemes;
-  const pool = checked ? decks.filter(d => checked.includes(d.id)) : decks;
-  const candidates = pool.length ? pool : decks;
-  const deck = (wanted && decks.find(d => d.id === wanted)) || candidates[Math.floor(Math.random() * candidates.length)];
-  // Format : celui demandé, sinon un des formats cochés dans l'écran Jouer, tiré au hasard.
+  // Format : celui demandé, sinon un des formats cochés dans l'écran Arène, tiré au hasard.
   const modes = state.multiModes && state.multiModes.length ? state.multiModes : ['medley'];
-  const mode = (opts && opts.mode) || modes[Math.floor(Math.random() * modes.length)];
-  let opponent = opts && opts.opponent;
+  const mode = opts.mode || modes[Math.floor(Math.random() * modes.length)];
+  let opponent = opts.opponent;
   const kind = opponent ? (opts.skipSearch ? 'rematch' : 'friend') : 'quick';
   if (!opponent) {
     const online = DEMO_PEOPLE.filter(p => p.online);
     opponent = online[Math.floor(Math.random() * online.length)];
   }
-  state.duel = { phase: kind === 'rematch' ? 'found' : 'search', kind, mode, opponent, deckId: deck.id, deckName: deck.name, daily: !!(opts && opts.daily) };
+  state.duel = { phase: kind === 'rematch' ? 'found' : 'search', kind, mode, opponent, ranked: !!opts.ranked,
+    leagueId: opts.league || '', deckId: deck ? deck.id : '', deckName: opts.league ? leagueLabel(opts.league) : deck.name, daily: !!opts.daily };
   refreshFn();
   const wait = kind === 'rematch' ? 0 : (kind === 'friend' ? 1400 : 2400);
   stepTimers.push(setTimeout(function () {
@@ -87,6 +93,17 @@ export function startDuel(opts) {
     refreshFn();
     stepTimers.push(setTimeout(startMatch, 1700));
   }, wait));
+}
+
+// Combat de salon : plusieurs amis (simulés) répondent aux mêmes questions en même temps. Aucun point.
+export function startRoom(opts) {
+  clearAll();
+  const modes = state.multiModes && state.multiModes.length ? state.multiModes : ['medley'];
+  const mode = opts.mode || modes[Math.floor(Math.random() * modes.length)];
+  state.duel = { phase: 'found', kind: 'room', room: true, mode, ranked: false, leagueId: opts.league, deckId: '', deckName: leagueLabel(opts.league),
+    others: opts.players.map(p => ({ name: p.name, level: p.level, score: 0 })), opponent: null };
+  refreshFn();
+  stepTimers.push(setTimeout(startMatch, 2000));
 }
 
 // ---------- Fabrication des questions ----------
@@ -124,6 +141,23 @@ function matchQuestion(picked) {
     pairs: picked.map(c => ({ front: c.front, back: c.back })), time: QTIME.match };
 }
 
+// Questions d'une ligue : les mêmes pour tous les joueurs (tirées de la banque commune du thème).
+function bankQuestions(leagueId, mode) {
+  const items = shuffle(leagueItems(leagueId));
+  const qcm = function (it) {
+    const options = shuffle(it.slice(1));
+    return { type: 'qcm', label: 'QCM', front: it[0], sub: '', options, correct: options.indexOf(it[1]), time: QTIME.qcm };
+  };
+  const vf = function (it) {
+    const isTrue = Math.random() < 0.5;
+    const shown = isTrue ? it[1] : shuffle(it.slice(2))[0];
+    return { type: 'vf', label: 'Vrai ou faux ?', front: it[0], sub: '→ ' + shown, options: ['Vrai', 'Faux'], correct: isTrue ? 0 : 1, time: QTIME.vf };
+  };
+  if (mode === 'vf') return items.slice(0, 6).map(vf);
+  if (mode === 'qcm') return items.slice(0, 5).map(qcm);
+  return items.slice(0, 5).map((it, i) => (i % 2 === 1 ? vf(it) : qcm(it)));
+}
+
 function buildQuestions(deckId, mode) {
   const deckCards = treeCards(deckId);
   const cards = shuffle(deckCards);
@@ -155,7 +189,7 @@ function buildQuestions(deckId, mode) {
 function startMatch() {
   const d = state.duel;
   if (!d) return;
-  d.questions = buildQuestions(d.deckId, d.mode);
+  d.questions = d.leagueId ? bankQuestions(d.leagueId, d.mode) : buildQuestions(d.deckId, d.mode);
   d.index = 0;
   d.me = { score: 0 };
   d.opp = { score: 0 };
@@ -168,6 +202,7 @@ function startQuestion() {
   const qu = d.questions[d.index];
   d.phase = 'question';
   d.q = { time: qu.time, timeLeft: qu.time, meAnswered: false, meIdx: null, meCorrect: false, oppAnswered: false, oppCorrect: false };
+  if (d.room) d.q.others = d.others.map(() => ({ answered: false, correct: false }));
   if (qu.type === 'match') {
     const idx = qu.pairs.map((_, i) => i);
     d.q.match = { left: shuffle(idx), right: shuffle(idx), done: idx.map(() => false), selL: null, selR: null, wrong: null, count: 0 };
@@ -175,9 +210,20 @@ function startQuestion() {
   refreshFn();
   clearInterval(tickTimer);
   tickTimer = setInterval(tick, 100);
+  const lvl = d.leagueId ? parseLeague(d.leagueId) : null;
+  const levelSkill = lvl ? lvl.level.skill : 1;
+  if (d.room) {
+    // Chaque ami simulé répond à son rythme, avec une chance d'avoir juste selon son niveau.
+    d.others.forEach(function (o, i) {
+      let sk = Math.min(0.88, 0.5 + 0.06 * o.level) * levelSkill;
+      if (qu.type === 'vf') sk = 0.5 + (sk - 0.5) * 0.8;
+      roomTimers[i] = setTimeout(function () { roomAnswer(i, Math.random() < sk); }, 1500 + Math.random() * (qu.time * 700 - 1500));
+    });
+    return;
+  }
   // Le « bot » répond en 1,5 s à 70 % du temps imparti ; il est juste avec une
   // probabilité qui dépend de son niveau (un peu moins en vrai/faux : 50 % au hasard).
-  let skill = Math.min(0.88, 0.5 + 0.06 * d.opponent.level);
+  let skill = Math.min(0.88, 0.5 + 0.06 * d.opponent.level) * levelSkill;
   if (qu.type === 'vf') skill = 0.5 + (skill - 0.5) * 0.8;
   clearTimeout(botTimer);
   if (qu.type === 'match') {
@@ -237,6 +283,11 @@ function paint() {
   set('duel-timer-fill', el => { el.style.width = Math.max(0, d.q.timeLeft / d.q.time * 100) + '%'; });
   set('duel-timer-num', el => { el.textContent = Math.ceil(Math.max(0, d.q.timeLeft)); });
   set('duel-score-me', el => { el.textContent = d.me.score; });
+  if (d.room) {
+    d.others.forEach((o, i) => set('room-score-' + i, el => { el.textContent = o.score; }));
+    set('duel-opp-status', el => { const n = d.q.others.filter(x => x.answered).length; el.textContent = n + ' / ' + d.others.length + ' ont répondu'; });
+    return;
+  }
   set('duel-score-opp', el => { el.textContent = d.opp.score; });
   set('duel-opp-status', el => { el.textContent = d.q.oppAnswered ? d.opponent.name + ' a répondu ✓' : d.opponent.name + ' réfléchit…'; });
 }
@@ -247,6 +298,17 @@ function tick() {
   d.q.timeLeft -= 0.1;
   paint();
   if (d.q.timeLeft <= 0) reveal();
+}
+
+// Un ami simulé du salon répond.
+function roomAnswer(i, correct) {
+  const d = state.duel;
+  if (!d || !d.room || d.phase !== 'question' || d.q.others[i].answered) return;
+  d.q.others[i].answered = true;
+  d.q.others[i].correct = correct;
+  if (correct) d.others[i].score += bonus(d.q);
+  paint();
+  if (d.q.meAnswered && d.q.others.every(x => x.answered)) reveal();
 }
 
 function botAnswer(correct) {
@@ -267,7 +329,7 @@ export function answer(i) {
   d.q.meIdx = i;
   d.q.meCorrect = i === question.correct;
   if (d.q.meCorrect) d.me.score += bonus(d.q);
-  if (d.q.oppAnswered) reveal();
+  if (d.room ? d.q.others.every(x => x.answered) : d.q.oppAnswered) reveal();
   else refreshFn(); // affiche ta réponse choisie, en attendant l'adversaire
 }
 
@@ -278,7 +340,7 @@ function reveal() {
   clearTimeout(botTimer);
   d.phase = 'reveal';
   // Manche d'appariement non terminée à temps : points partiels, 40 par paire reliée.
-  if (d.questions[d.index].type === 'match') {
+  if (!d.room && d.questions[d.index].type === 'match') {
     if (!d.q.meAnswered) d.me.score += d.q.match.count * 40;
     if (!d.q.oppAnswered) d.opp.score += 80;
   }
@@ -294,35 +356,37 @@ function endMatch() {
   const d = state.duel;
   if (!d) return;
   ensureWeek();
+  ensureSeason();
+  if (d.room) {
+    // Classement du salon : toi + les amis, du meilleur score au moins bon. Pas de points.
+    const board = [{ name: state.profile.pseudo, score: d.me.score, me: true }].concat(d.others.map(o => ({ name: o.name, score: o.score, me: false })));
+    board.sort((a, b) => b.score - a.score || (a.me ? -1 : b.me ? 1 : 0));
+    d.phase = 'end';
+    d.result = { room: true, board, outcome: board[0].me ? 'win' : 'loss', rank: board.findIndex(r => r.me) + 1, gained: 0, dailyBonus: 0 };
+    refreshFn();
+    return;
+  }
   const outcome = d.me.score > d.opp.score ? 'win' : d.me.score < d.opp.score ? 'loss' : 'draw';
-  let gained = POINTS[outcome];
-  // Défi du jour : bonus de 20 points, une seule fois par jour.
+  let gained = 0;
+  let rank = 0;
+  // Seul un duel classé dans une ligue rapporte des points ; le multiplicateur dépend du niveau.
+  if (d.ranked && d.leagueId) {
+    const lv = parseLeague(d.leagueId).level;
+    gained = Math.round(POINTS[outcome] * lv.mult);
+    const st = state.multi.leagues[d.leagueId] || { points: 0, played: 0, wins: 0 };
+    st.points += gained; st.played++; if (outcome === 'win') st.wins++;
+    state.multi.leagues[d.leagueId] = st;
+    state.multi.weekPoints += gained;
+    state.multi.total += gained;
+    state.multi.played++;
+    if (outcome === 'win') state.multi.wins++;
+    rank = standings(d.leagueId).findIndex(r => r.me) + 1;
+  }
+  // Défi du jour : bonus de 20 points d'arène, une seule fois par jour.
   let dailyBonus = 0;
-  if (d.daily && state.meta.dailyDone !== todayStr()) { dailyBonus = 20; state.meta.dailyDone = todayStr(); gained += dailyBonus; }
-  state.multi.weekPoints += gained;
-  state.multi.total += gained;
-  state.multi.played++;
-  if (outcome === 'win') state.multi.wins++;
+  if (d.daily && state.meta.dailyDone !== todayStr()) { dailyBonus = 20; state.meta.dailyDone = todayStr(); state.multi.weekPoints += dailyBonus; state.multi.total += dailyBonus; }
   persist();
   d.phase = 'end';
-  d.result = { outcome, gained, dailyBonus, rank: leagueTable('general').findIndex(r => r.me) + 1 };
+  d.result = { outcome, gained, dailyBonus, rank, ranked: d.ranked && !!d.leagueId };
   refreshFn();
-}
-
-// Classement de la semaine pour un cercle : 'general' (joueurs fictifs), 'amis' (tes amis)
-// ou 'promo' (une promo fictive). Toi : à égalité, tu passes devant.
-export function leagueTable(scope) {
-  ensureWeek();
-  let base;
-  if (scope === 'promo') base = PROMO_BOTS;
-  else if (scope === 'amis') {
-    base = state.social.friends.map(function (name) {
-      const known = LEAGUE_BOTS.find(b => b.name === name);
-      return { name, points: known ? known.points : 30 };
-    });
-  } else base = LEAGUE_BOTS;
-  const rows = base.map(b => ({ name: b.name, points: b.points, me: false }));
-  rows.push({ name: state.profile.pseudo, points: state.multi.weekPoints, me: true });
-  rows.sort((a, b) => b.points - a.points || (a.me ? -1 : b.me ? 1 : 0));
-  return rows;
 }

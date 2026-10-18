@@ -10,7 +10,8 @@ import {
 } from './state.js';
 import { AI_TOPICS, FACTS, DEMO_PEOPLE, ARTICLES, MOOC_PROVIDERS, MOOC_TOPICS, MOOC_LANGS, MOOC_LANG_NAMES } from './demo.js';
 import { todayStr } from './state.js';
-import { leagueTable, POINTS, DUEL_MODES, eligibleDecks } from './duel.js';
+import { POINTS, DUEL_MODES } from './duel.js';
+import { LEVELS, THEMES, parseLeague, leagueLabel, leaguePlayers, leaguePrize, standings, myLeagueStats, daysLeftInSeason, ensureSeason } from './leagues.js';
 
 // Accord simple : pl(2, 'carte') donne « 2 cartes », pl(1, 'carte') donne « 1 carte ».
 function pl(n, one, many) {
@@ -22,7 +23,7 @@ const IMMERSIVE_VIEWS = ['session', 'duel'];
 // Onglet actif selon l'écran affiché (la navigation à l'intérieur d'un onglet ne change pas d'onglet).
 const TAB_OF_VIEW = {
   home: 'learn', rubrique: 'learn', modes: 'learn', cards: 'learn', search: 'learn',
-  multi: 'play', league: 'play', friends: 'play',
+  multi: 'play', league: 'play', friends: 'play', leagues: 'play', room: 'play',
   create: 'create', ai: 'create',
   stats: 'progress',
   settings: 'profile', trash: 'profile', pitch: 'profile'
@@ -37,7 +38,7 @@ export function render() {
   }
   const screens = {
     home: renderHome, rubrique: renderRubrique, modes: renderModes, cards: renderCards, search: renderSearch,
-    multi: renderMulti, league: renderLeague, friends: renderFriends, duel: renderDuel,
+    multi: renderMulti, league: renderLeague, friends: renderFriends, duel: renderDuel, leagues: renderLeagues, room: renderRoom,
     create: renderCreate, ai: renderAi, stats: renderStats,
     settings: renderSettings, trash: renderTrash, pitch: renderPitch, session: renderSession
   };
@@ -53,6 +54,7 @@ export function render() {
   if (state.showPaywall) app.insertAdjacentHTML('beforeend', renderPaywall());
   if (state.showProfile) app.insertAdjacentHTML('beforeend', renderProfileModal());
   if (state.showFeedback) app.insertAdjacentHTML('beforeend', renderFeedbackModal());
+  if (state.showProposal) app.insertAdjacentHTML('beforeend', renderProposalModal());
   if (state.updateReady) app.insertAdjacentHTML('beforeend', '<div class="update-bar" onclick="location.reload()">✨ Nouvelle version disponible · toucher pour recharger</div>');
   // Toujours en dernier : la confirmation doit passer au-dessus de toute autre fenêtre.
   if (state.confirmDialog) app.insertAdjacentHTML('beforeend', renderConfirmDialog());
@@ -926,65 +928,134 @@ function arenaBanner(right, stats) {
     + '</div>' + (stats || '') + '</div>';
 }
 
-// Lignes de la liste des thèmes : groupées par rubrique, filtrables par le texte de la barre de recherche.
-export function themeRowsHtml(query) {
+// ---- Ligues : catalogue, hub de l'arène, classements, salon d'amis ----
+const fmtN = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+// Ligues cochées pour jouer, parmi celles rejointes.
+function playableIds() {
+  const joined = state.multi.joined;
+  return state.multiLeagues ? state.multiLeagues.filter(id => joined.includes(id)) : joined.slice();
+}
+function prizeBadge(id) {
+  const pr = leaguePrize(id);
+  return pr.unlocked ? '<span class="lg-prize on">Lot de la saison</span>' : '<span class="lg-prize">Lot dès ' + fmtN(pr.min) + ' joueurs</span>';
+}
+
+// Lignes du catalogue : un bloc par thème avec ses 4 niveaux. Exportée : app.js la met à jour pendant la recherche.
+export function leagueRowsHtml(query) {
   const q = normalize(query || '');
-  const ok = new Set(eligibleDecks().map(d => d.id));
-  const checked = state.multiThemes ? new Set(state.multiThemes.filter(id => ok.has(id))) : ok;
-  let html = '';
-  state.rubriques.filter(r => !r.hidden).sort((a, b) => a.order - b.order).forEach(function (r) {
-    const rows = [];
-    decksOf(r.id).forEach(function (d0) {
-      treeNodes(d0.id).forEach(function (n) {
-        if (!ok.has(n.id)) return;
-        const node = state.decks.find(x => x.id === n.id);
-        if (q && !normalize(deckPath(n.id)).includes(q)) return;
-        const ids = descendantIds(n.id).filter(x => ok.has(x));
-        const k = ids.filter(x => checked.has(x)).length;
-        rows.push('<button class="dd-row" style="padding-left:' + (14 + n.depth * 18) + 'px;" onclick="App.toggleMultiTheme(\'' + n.id + '\')">'
-          + '<span class="dd-box ' + (k === ids.length ? 'on' : k === 0 ? 'off' : 'part') + '">' + (k === ids.length ? '✓' : k === 0 ? '' : '–') + '</span>'
-          + '<span class="dd-label">' + esc(node.name) + '</span><span class="dd-count">' + pl(treeCards(n.id).length, 'carte') + '</span></button>');
-      });
-    });
-    if (!rows.length) return;
-    const rids = allDecksOf(r.id).map(d => d.id).filter(id => ok.has(id));
-    const kk = rids.filter(x => checked.has(x)).length;
-    html += '<button class="dd-group" onclick="App.toggleMultiRubrique(\'' + r.id + '\')">'
-      + '<span class="dd-box ' + (kk === rids.length ? 'on' : kk === 0 ? 'off' : 'part') + '">' + (kk === rids.length ? '✓' : kk === 0 ? '' : '–') + '</span>'
-      + '<span class="dd-label">' + esc(r.name) + '</span><span class="dd-count">' + kk + ' / ' + rids.length + '</span></button>' + rows.join('');
-  });
-  return html || '<div class="rub-meta" style="padding:14px;">Aucun paquet ne correspond à « ' + esc(query) + ' ».</div>';
+  const joined = state.multi.joined;
+  const themes = THEMES.filter(t => !q || normalize(t.label + ' ' + t.desc).includes(q));
+  if (!themes.length) return '<div class="rub-meta">Aucun thème ne correspond à « ' + esc(query) + ' ». Tu peux le proposer ci-dessous.</div>';
+  return themes.map(function (t) {
+    return '<div class="lg-theme"><div class="lg-head"><div class="lg-title">' + esc(t.label) + '</div><div class="lg-desc">' + esc(t.desc) + '</div></div>'
+      + LEVELS.map(function (l) {
+        const id = t.id + ':' + l.id;
+        const on = joined.includes(id);
+        return '<div class="lg-level"><div class="lg-lv"><b>' + l.label + '</b><span>' + pl(leaguePlayers(id), 'joueur') + ' · ×' + l.mult + ' points</span></div>' + prizeBadge(id)
+          + '<button class="lg-join' + (on ? ' on' : '') + '" onclick="App.joinLeague(\'' + id + '\')">' + (on ? 'Rejoint ✓' : 'Rejoindre') + '</button></div>';
+      }).join('') + '</div>';
+  }).join('');
+}
+
+function renderLeagues() {
+  let html = '<button class="backbtn" onclick="App.openMulti()">‹ Arène</button>';
+  html += '<div class="eyebrow">Ligues</div><h1 class="title">Choisis tes ligues</h1>';
+  html += '<div class="subtitle">Une ligue = un thème commun à tous les joueurs, en 4 niveaux. Tout le monde répond aux mêmes questions : le classement est équitable.</div>';
+  html += '<input class="answer-input" style="max-width:none;text-align:left;margin-bottom:14px;" id="league-search" placeholder="Rechercher un thème (ex : marketing)" oninput="App.searchLeagues(this.value)" autocomplete="off" autocapitalize="off" value="' + esc(state.themeQuery) + '"/>';
+  html += '<div id="league-rows">' + leagueRowsHtml(state.themeQuery) + '</div>';
+  html += '<button class="add-row" onclick="App.openProposal()">+ Proposer un thème</button>';
+  const pr = state.multi.proposals;
+  if (pr.length) html += '<div class="rub-meta" style="margin-top:10px;">En attente de validation par l\'équipe : ' + pr.map(esc).join(', ') + '</div>';
+  html += '<div class="rub-meta" style="margin-top:14px;">Prototype : joueurs, lots et validation sont simulés. Questions d\'exemple écrites à la main.</div>';
+  return html;
+}
+
+function renderProposalModal() {
+  return '<div class="modal-backdrop" onclick="if(event.target===this) App.closeModals()"><div class="modal">'
+    + '<div class="eyebrow">Proposer un thème</div>'
+    + '<div class="rub-meta" style="margin-top:8px;">Un thème répandu (ex : droit du travail, Python, histoire de l\'art) peut devenir une ligue. L\'équipe de Boîte à Fiches le valide avant l\'ouverture, puis une IA prépare les questions et elles sont relues.</div>'
+    + '<label>Nom du thème</label><input id="proposal-name" maxlength="60" placeholder="ex : Droit du travail" autocomplete="off"/>'
+    + '<div class="modal-actions"><button class="btn ghost" onclick="App.closeModals()">Annuler</button><button class="btn" onclick="App.saveProposal()">Envoyer</button></div>'
+    + '</div></div>';
 }
 
 function renderMulti() {
   ensureWeek();
   const m = state.multi;
   const dailyDone = state.meta.dailyDone === todayStr();
+  const ranked = state.arenaMode === 'ranked';
   let html = playHeader('multi');
 
   const fm = state.multiModes;
   const formatItems = DUEL_MODES.map(x => ({ id: x.id, label: x.label, state: fm.includes(x.id) ? 'on' : 'off' }));
   const formatSummary = fm.length === DUEL_MODES.length ? 'Tous les formats' : DUEL_MODES.filter(x => fm.includes(x.id)).map(x => x.label).join(', ');
-  const ok = new Set(eligibleDecks().map(d => d.id));
-  const checked = state.multiThemes ? new Set(state.multiThemes.filter(id => ok.has(id))) : ok;
-  const themeSummary = checked.size === ok.size ? 'Tous les paquets' : (checked.size === 1 ? esc(state.decks.find(x => x.id === [...checked][0]).name) : checked.size + ' paquets');
+  const joined = m.joined;
+  const play = playableIds();
+  const leagueSummary = !joined.length ? 'Aucune ligue' : play.length === joined.length ? (joined.length === 1 ? leagueLabel(joined[0]) : 'Toutes mes ligues (' + joined.length + ')') : (play.length === 1 ? leagueLabel(play[0]) : play.length + ' ligues');
 
-  const stats = '<div class="arena-stats"><div><b>' + m.weekPoints + '</b><span>pts cette semaine</span></div><div><b>' + m.wins + '</b><span>' + (m.wins > 1 ? 'victoires' : 'victoire') + '</span></div><div><b>' + m.played + '</b><span>' + (m.played > 1 ? 'duels' : 'duel') + '</span></div></div>';
+  const stats = '<div class="arena-stats"><div><b>' + m.weekPoints + '</b><span>pts cette semaine</span></div><div><b>' + m.wins + '</b><span>' + (m.wins > 1 ? 'victoires' : 'victoire') + '</span></div><div><b>' + m.played + '</b><span>' + (m.played > 1 ? 'duels classés' : 'duel classé') + '</span></div></div>';
   html += arenaBanner({ mode: 'idle', av: '?', name: 'Adversaire', sub: 'à tirer au sort' }, stats);
-  html += '<button class="arena-cta" onclick="App.quickMatch()"><span class="arena-cta-t">' + tabIcon(SWORDS) + 'Entrer dans l\'arène</span>'
-    + '<span class="arena-cta-s">' + esc(formatSummary) + ' · ' + themeSummary + '</span></button>';
+
+  html += '<div class="mode-seg"><button class="mode-seg-b' + (ranked ? ' on' : '') + '" onclick="App.setArenaMode(\'ranked\')">Classé</button>'
+    + '<button class="mode-seg-b' + (!ranked ? ' on' : '') + '" onclick="App.setArenaMode(\'friendly\')">Amical</button></div>';
+  if (!joined.length) {
+    html += '<button class="arena-cta" onclick="App.openLeagues()"><span class="arena-cta-t">' + tabIcon(SWORDS) + 'Rejoindre une ligue</span><span class="arena-cta-s">Choisis un thème et un niveau pour combattre</span></button>';
+  } else {
+    html += '<button class="arena-cta" onclick="App.quickMatch()"><span class="arena-cta-t">' + tabIcon(SWORDS) + (ranked ? 'Entrer dans l\'arène' : 'Combat amical') + '</span>'
+      + '<span class="arena-cta-s">' + (ranked ? 'Classé' : 'Sans points') + ' · ' + esc(leagueSummary) + '</span></button>';
+  }
+  html += '<div class="rub-meta" style="margin:8px 4px 0;">' + (ranked ? 'Les points comptent pour le classement de la ligue tirée au sort.' : 'Pour t\'entraîner ou te tester : aucun point gagné ni perdu.') + '</div>';
 
   html += '<div class="section-label">Préparer le combat</div>';
+  const leagueItems = joined.map(id => ({ id, label: leagueLabel(id), count: pl(leaguePlayers(id), 'joueur'), state: play.includes(id) ? 'on' : 'off' }));
+  const leaguePanel = (joined.length ? leagueItems.map(it => '<button class="dd-row" onclick="App.toggleMultiLeague(\'' + it.id + '\')"><span class="dd-box ' + it.state + '">' + (it.state === 'on' ? '✓' : '') + '</span><span class="dd-label">' + esc(it.label) + '</span><span class="dd-count">' + it.count + '</span></button>').join('')
+      : '<div class="rub-meta" style="padding:14px;">Tu n\'as encore rejoint aucune ligue.</div>')
+    + '<button class="dd-row dd-all" onclick="App.openLeagues()"><span class="dd-label">Explorer et rejoindre des ligues ›</span></button>';
+  html += dropdown('leagues', 'Ligue', esc(leagueSummary), [], null, '', leaguePanel);
   html += dropdown('formats', 'Format du duel', esc(formatSummary), formatItems, it => 'App.toggleMultiMode(\'' + it.id + '\')', '');
-  const panel = '<div class="dd-search"><input id="theme-search" placeholder="Rechercher un paquet…" value="' + esc(state.themeQuery) + '" oninput="App.searchThemes(this.value)" autocomplete="off" autocapitalize="off"/></div>'
-    + (checked.size === ok.size ? '' : '<button class="dd-row dd-all" onclick="App.allMultiThemes()"><span class="dd-box on">✓</span><span class="dd-label">Tout cocher</span></button>')
-    + '<div id="theme-rows">' + themeRowsHtml(state.themeQuery) + '</div>';
-  html += dropdown('themes', 'Champ de bataille', themeSummary, [], null, '', panel);
 
+  html += '<div class="quest room-card" onclick="App.openRoom()"><span class="quest-ic">' + tabIcon('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>') + '</span><div style="flex:1;min-width:0;">'
+    + '<div class="quest-k">Combat amical</div><div class="mode-title">Salon d\'amis</div><div class="mode-desc">Affronte plusieurs amis en même temps, sans points</div></div><span class="chev">›</span></div>';
   html += '<div class="quest" onclick="App.dailyChallenge()"><span class="quest-ic">' + tabIcon('<path d="M12 2l2.6 6.3L21 9l-5 4.4L17.5 20 12 16.6 6.5 20 8 13.4 3 9l6.4-.7z"/>') + '</span><div style="flex:1;min-width:0;">'
     + '<div class="quest-k">Défi du jour' + (dailyDone ? ' · relevé' : '') + '</div><div class="mode-title">' + (dailyDone ? 'Reviens demain' : 'Un Medley express') + '</div>'
-    + '<div class="mode-desc">' + (dailyDone ? 'Le prochain défi t\'attend demain.' : '+20 points de bonus pour la ligue') + '</div></div><span class="chev">›</span></div>';
-  html += '<div class="rub-meta" style="margin-top:14px;">Prototype : adversaires et classement simulés.</div>';
+    + '<div class="mode-desc">' + (dailyDone ? 'Le prochain défi t\'attend demain.' : '+20 points d\'arène de bonus') + '</div></div><span class="chev">›</span></div>';
+  html += '<button class="link" style="display:block;margin:14px auto 0;" onclick="App.trainOwn()">S\'entraîner sur mes propres cartes</button>';
+  html += '<div class="rub-meta" style="margin-top:12px;">Prototype : adversaires, joueurs et lots simulés.</div>';
+  return html;
+}
+
+// Salon d'amis : un combat amical à plusieurs (invités simulés), mêmes questions pour tous.
+function renderRoom() {
+  const r = state.room;
+  if (!r) return renderMulti();
+  const total = r.players.length + 1;
+  const online = DEMO_PEOPLE.filter(p => p.online && !r.players.some(x => x.name === p.name));
+  const leagueOptions = THEMES.map(t => '<optgroup label="' + esc(t.label) + '">' + LEVELS.map(l => {
+    const id = t.id + ':' + l.id;
+    return '<option value="' + id + '"' + (id === r.league ? ' selected' : '') + '>' + esc(t.label + ' · ' + l.label) + '</option>';
+  }).join('') + '</optgroup>').join('');
+  const fm = state.multiModes;
+  const formatSummary = fm.length === DUEL_MODES.length ? 'Tous les formats' : DUEL_MODES.filter(x => fm.includes(x.id)).map(x => x.label).join(', ');
+  let html = '<button class="backbtn" onclick="App.leaveRoom()">‹ Arène</button>';
+  html += '<div class="eyebrow">Combat amical</div><h1 class="title">Salon d\'amis</h1>';
+  html += '<div class="room-code"><div><div class="onb-label" style="margin:0 0 4px;">Code du salon</div><div class="room-code-n">' + esc(r.code) + '</div></div>'
+    + '<button class="btn ghost" onclick="App.roomShare()">Partager</button></div>';
+  html += '<label class="onb-label" for="room-league">Thème et niveau</label><div class="onb-selectwrap"><select id="room-league" class="onb-select" onchange="App.roomLeague(this.value)">' + leagueOptions + '</select></div>';
+  html += '<div style="margin-top:12px;">' + dropdown('roomfmt', 'Format du duel', esc(formatSummary), DUEL_MODES.map(x => ({ id: x.id, label: x.label, state: fm.includes(x.id) ? 'on' : 'off' })), it => 'App.toggleMultiMode(\'' + it.id + '\')', '') + '</div>';
+
+  html += '<div class="section-label">Joueurs du salon · ' + total + '</div><div class="settings-group">'
+    + '<div class="friend-row"><div class="badge" style="background:var(--bg);font-size:20px;">' + esc(state.profile.avatar) + '</div><div style="flex:1;min-width:0;"><div class="rub-name">' + esc(state.profile.pseudo) + '</div><div class="rub-meta">Hôte · prêt</div></div></div>'
+    + r.players.map(p => '<div class="friend-row">' + avatar(p.name) + '<div style="flex:1;min-width:0;"><div class="rub-name">' + esc(p.name) + '</div><div class="rub-meta">Niveau ' + p.level + ' · prêt</div></div><button class="hidebtn" onclick="App.roomRemove(\'' + esc(p.name) + '\')">retirer</button></div>').join('')
+    + r.pending.map(n => '<div class="friend-row">' + avatar(n) + '<div style="flex:1;"><div class="rub-name">' + esc(n) + '</div><div class="rub-meta">invitation envoyée…</div></div><div class="spinner" style="width:18px;height:18px;margin:0;"></div></div>').join('')
+    + '</div>';
+  if (online.length) {
+    html += '<div class="section-label">Amis en ligne</div><div class="settings-group">'
+      + online.filter(p => !r.pending.includes(p.name)).map(p => '<div class="friend-row">' + avatar(p.name) + '<div style="flex:1;min-width:0;"><div class="rub-name">' + esc(p.name) + '</div><div class="rub-meta"><span class="online-dot on"></span>niveau ' + p.level + '</div></div><button class="btn ghost" onclick="App.roomInvite(\'' + esc(p.name) + '\')">Inviter</button></div>').join('')
+      + '</div>';
+  }
+  html += '<button class="arena-cta" style="margin-top:18px;' + (total < 2 ? 'opacity:.45;' : '') + '" ' + (total < 2 ? '' : 'onclick="App.roomStart()"') + '><span class="arena-cta-t">' + tabIcon(SWORDS) + 'Lancer le combat</span><span class="arena-cta-s">' + (total < 2 ? 'Invite au moins un ami' : total + ' joueurs · sans points') + '</span></button>';
+  html += '<div class="rub-meta" style="margin-top:12px;">Prototype : les invités sont simulés et acceptent automatiquement.</div>';
   return html;
 }
 
@@ -994,36 +1065,58 @@ function renderDuel() {
   const back = '<button class="backbtn" onclick="App.openMulti()">‹ Quitter</button>';
 
   if (d.phase === 'nodeck') {
-    return back + '<h1 class="title">Pas assez de cartes</h1><div class="subtitle">Il faut un paquet d\'au moins 4 cartes pour lancer un duel.</div>';
+    return back + '<h1 class="title">Pas assez de cartes</h1><div class="subtitle">Il faut un paquet d\'au moins 4 cartes pour t\'entraîner sur tes cartes.</div>';
   }
   const opp = d.opponent;
   const fmtLabel = (DUEL_MODES.find(x => x.id === d.mode) || DUEL_MODES[0]).label;
   const oppAv = esc(opp ? opp.name.charAt(0).toUpperCase() : '?');
+  const stake = d.room ? 'Salon d\'amis' : d.ranked ? 'Classé' : d.leagueId ? 'Amical' : 'Entraînement';
+  const chips = '<div class="arena-chips"><span>' + stake + '</span><span>' + esc(fmtLabel) + '</span><span>' + esc(d.deckName) + '</span></div>';
   if (d.phase === 'search') {
     return '<div class="arena-screen"><div class="arena-kicker">' + (d.kind === 'friend' ? 'Défi lancé' : 'Matchmaking') + '</div>'
       + '<h1 class="title arena-big">' + (d.kind === 'friend' ? 'En attente de ' + esc(opp.name) : 'Recherche d\'un adversaire') + '</h1>'
       + arenaBanner({ mode: 'search', av: d.kind === 'friend' ? oppAv : '?', name: d.kind === 'friend' ? opp.name : 'Adversaire', sub: d.kind === 'friend' ? 'invitation envoyée' : 'recherche…' })
-      + '<div class="arena-chips"><span>' + esc(fmtLabel) + '</span><span>' + esc(d.deckName) + '</span></div>'
-      + '<button class="link" onclick="App.openMulti()">Annuler</button></div>';
+      + chips + '<button class="link" onclick="App.openMulti()">Annuler</button></div>';
+  }
+  if (d.phase === 'found' && d.room) {
+    return '<div class="arena-screen"><div class="arena-kicker">Salon d\'amis</div><h1 class="title arena-big">Prépare-toi !</h1>'
+      + '<div class="arena arena-found"><div class="room-faces">' + '<div class="fighter me"><div class="fighter-av">' + esc(state.profile.avatar) + '</div><div class="fighter-name">' + esc(state.profile.pseudo) + '</div></div>'
+      + d.others.map(o => '<div class="fighter opp"><div class="fighter-av">' + esc(o.name.charAt(0).toUpperCase()) + '</div><div class="fighter-name">' + esc(o.name) + '</div></div>').join('') + '</div></div>'
+      + chips + '<div class="arena-go">Le combat commence…</div></div>';
   }
   if (d.phase === 'found') {
     return '<div class="arena-screen"><div class="arena-kicker">' + (d.daily ? 'Défi du jour' : d.kind === 'friend' ? esc(opp.name) + ' a accepté' : 'Adversaire trouvé') + '</div>'
       + '<h1 class="title arena-big">Prépare-toi !</h1>'
       + arenaBanner({ mode: 'found', av: oppAv, name: opp.name, sub: 'Niveau ' + opp.level })
-      + '<div class="arena-chips"><span>' + esc(fmtLabel) + '</span><span>' + esc(d.deckName) + '</span></div>'
-      + '<div class="arena-go">Le combat commence…</div></div>';
+      + chips + '<div class="arena-go">Le combat commence…</div></div>';
   }
   if (d.phase === 'end') {
     const r = d.result;
+    if (r.room) {
+      const medals = ['🥇', '🥈', '🥉'];
+      return '<div class="arena-screen"><div class="arena-kicker">Résultat du salon</div>'
+        + '<h1 class="title arena-result ' + (r.rank === 1 ? 'win' : 'draw') + '">' + (r.rank === 1 ? 'Victoire' : r.rank + (r.rank === 1 ? 'er' : 'e') + ' place') + '</h1>'
+        + '<div class="settings-group" style="width:100%;margin-top:14px;text-align:left;">' + r.board.map((b, i) => '<div class="league-row' + (b.me ? ' me' : '') + '"><span class="rank">' + (medals[i] || (i + 1)) + '</span><span class="league-name">' + esc(b.name) + '</span><span class="league-pts">' + b.score + '</span></div>').join('') + '</div>'
+        + '<div class="rub-meta" style="margin-top:12px;">Combat amical : aucun point en jeu.</div>'
+        + '<div class="row" style="margin-top:18px;"><button class="btn arena-btn" onclick="App.duelRematch()">Revanche</button><button class="btn ghost" onclick="App.openRoom()">Nouveau salon</button></div>'
+        + '<button class="link" style="margin-top:18px;" onclick="App.openMulti()">Retour à l\'arène</button></div>';
+    }
     const title = r.outcome === 'win' ? 'Victoire' : r.outcome === 'loss' ? 'Défaite' : 'Égalité';
+    let info;
+    if (r.ranked) {
+      info = '<div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points · ' + esc(leagueLabel(d.leagueId)) + (r.dailyBonus ? ' (+' + r.dailyBonus + ' bonus du défi)' : '') + '</div>'
+        + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement de la ligue ce mois-ci</div>';
+    } else {
+      info = '<div class="mode-title">' + (d.leagueId ? 'Combat amical : aucun point en jeu' : 'Entraînement : aucun point en jeu') + '</div>'
+        + '<div class="mode-desc">' + (r.dailyBonus ? '+' + r.dailyBonus + ' points d\'arène grâce au défi du jour' : 'Passe en mode « Classé » pour faire monter ton rang.') + '</div>';
+    }
     return '<div class="arena-screen"><div class="arena-kicker">Résultat du duel</div>'
       + '<h1 class="title arena-result ' + r.outcome + '">' + title + '</h1>'
       + '<div class="duel-final"><div class="duel-me"><div class="duel-name">' + esc(state.profile.pseudo) + '</div><div class="duel-score">' + d.me.score + '</div></div>'
       + '<div class="duel-vs">VS</div><div class="duel-opp"><div class="duel-name">' + esc(opp.name) + '</div><div class="duel-score">' + d.opp.score + '</div></div></div>'
-      + '<div class="stat-card" style="width:100%;margin-top:18px;"><div class="mode-title" style="color:var(--primary);">+' + r.gained + ' points de ligue' + (r.dailyBonus ? ' (dont ' + r.dailyBonus + ' de bonus du défi)' : '') + '</div>'
-      + '<div class="mode-desc">Tu es ' + r.rank + (r.rank === 1 ? 'er' : 'e') + ' du classement cette semaine' + (r.rank <= 5 ? ' · dans la zone des lots' : '') + '</div></div>'
+      + '<div class="stat-card" style="width:100%;margin-top:18px;">' + info + '</div>'
       + '<div class="row" style="margin-top:18px;"><button class="btn arena-btn" onclick="App.duelRematch()">Revanche</button>'
-      + '<button class="btn ghost" onclick="App.openLeague()">Classement</button></div>'
+      + (r.ranked ? '<button class="btn ghost" onclick="App.openLeague()">Classement</button>' : '<button class="btn ghost" onclick="App.openMulti()">Arène</button>') + '</div>'
       + '<button class="link" style="margin-top:18px;" onclick="App.openMulti()">Retour à l\'arène</button></div>';
   }
 
@@ -1038,12 +1131,17 @@ function renderDuel() {
     else if (q.meIdx === i) cls += ' picked';
     return '<button class="' + cls + '" ' + (q.meAnswered || revealed ? '' : 'onclick="App.duelAnswer(' + i + ')"') + '>' + esc(o) + '</button>';
   }).join('');
-  const status = revealed
+  const status = d.room ? (revealed ? (q.meAnswered ? (q.meCorrect ? 'Bonne réponse ✓' : 'Raté ✗') : 'Temps écoulé') + ' · ' + q.others.filter(x => x.correct).length + ' ami(s) ont eu juste' : q.meAnswered ? 'En attente des autres…' : q.others.filter(x => x.answered).length + ' / ' + d.others.length + ' ont répondu') : revealed
     ? (q.meAnswered ? (q.meCorrect ? 'Bonne réponse ✓' : 'Raté ✗') : 'Temps écoulé') + ' · ' + opp.name + (q.oppAnswered ? (q.oppCorrect ? ' a eu juste' : ' s\'est trompé') : ' n\'a pas répondu')
     : (q.meAnswered ? 'En attente de ' + opp.name + '…' : (q.oppAnswered ? opp.name + ' a répondu ✓' : opp.name + ' réfléchit…'));
-  return '<div class="duel-head"><div class="duel-side"><span class="duel-name">' + esc(state.profile.pseudo) + '</span><span class="duel-score" id="duel-score-me">' + d.me.score + '</span></div>'
-    + '<div class="duel-mid">' + (d.index + 1) + ' / ' + d.questions.length + '<div class="duel-num" id="duel-timer-num">' + Math.ceil(Math.max(q.timeLeft, 0)) + '</div></div>'
-    + '<div class="duel-side"><span class="duel-name">' + esc(opp.name) + '</span><span class="duel-score" id="duel-score-opp">' + d.opp.score + '</span></div></div>'
+  const head = d.room
+    ? '<div class="room-board"><div class="room-board-top"><span>Question ' + (d.index + 1) + ' / ' + d.questions.length + '</span><b id="duel-timer-num">' + Math.ceil(Math.max(q.timeLeft, 0)) + '</b></div>'
+      + '<div class="room-row me"><span>' + esc(state.profile.pseudo) + '</span><b id="duel-score-me">' + d.me.score + '</b></div>'
+      + d.others.map((o, i) => '<div class="room-row"><span>' + esc(o.name) + '</span><b id="room-score-' + i + '">' + o.score + '</b></div>').join('') + '</div>'
+    : '<div class="duel-head"><div class="duel-side"><span class="duel-name">' + esc(state.profile.pseudo) + '</span><span class="duel-score" id="duel-score-me">' + d.me.score + '</span></div>'
+      + '<div class="duel-mid">' + (d.index + 1) + ' / ' + d.questions.length + '<div class="duel-num" id="duel-timer-num">' + Math.ceil(Math.max(q.timeLeft, 0)) + '</div></div>'
+      + '<div class="duel-side"><span class="duel-name">' + esc(opp.name) + '</span><span class="duel-score" id="duel-score-opp">' + d.opp.score + '</span></div></div>';
+  return head
     + '<div class="goal-bar"><div class="goal-fill" id="duel-timer-fill" style="transition:none;width:' + Math.max(0, q.timeLeft / q.time * 100) + '%;"></div></div>'
     + '<div class="center"><div class="eyebrow" style="margin-top:20px;">' + esc(qu.label) + '</div>'
     + (qu.front ? '<div class="qtext" style="margin-top:8px;">' + esc(qu.front) + '</div>' : '')
@@ -1053,22 +1151,39 @@ function renderDuel() {
 }
 
 function renderLeague() {
-  const scope = state.leagueScope || 'general';
-  const rows = leagueTable(scope);
+  ensureSeason();
   let html = playHeader('league');
-  html += '<div class="chip-row" style="margin-bottom:12px;">' + [['general', '🌍 Général'], ['promo', '🎓 Promo'], ['amis', '👥 Amis']].map(function (x) {
-    return '<button class="chip wide' + (scope === x[0] ? ' sel' : '') + '" onclick="App.setLeagueScope(\'' + x[0] + '\')">' + x[1] + '</button>'; }).join('') + '</div>';
-  html += '<div class="rub-meta" style="margin:0 0 10px;">Fin de la ligue dans ' + daysLeftInWeek() + ' jour' + (daysLeftInWeek() > 1 ? 's' : '') + ' · victoire +' + POINTS.win + ' pts, égalité +' + POINTS.draw + ', défaite +' + POINTS.loss + '</div>';
-  if (scope !== 'amis') html += '<div class="prize-card"><span class="settings-ic">🎁</span><div><div class="mode-title">Lot du mois · partenaire</div>'
-    + '<div class="mode-desc">Les 5 premiers participent au tirage au sort : 2 places de concert (exemple).</div></div></div>';
-  if (scope === 'amis' && state.social.friends.length === 0) html += '<div class="rub-meta" style="margin-bottom:10px;">Ajoute des amis pour comparer vos points chaque semaine.</div>';
+  const joined = state.multi.joined;
+  if (!joined.length) {
+    html += '<div class="subtitle">Tu n\'as rejoint aucune ligue. Chaque ligue est un thème commun à tous les joueurs, avec son propre classement.</div>'
+      + '<button class="btn" onclick="App.openLeagues()">Explorer les ligues</button>';
+    return html;
+  }
+  const id = joined.includes(state.viewLeague) ? state.viewLeague : joined[0];
+  const p = parseLeague(id);
+  const rows = standings(id);
+  const mine = myLeagueStats(id);
+  const pr = leaguePrize(id);
+  const rank = rows.findIndex(r => r.me) + 1;
+  html += '<div class="onb-selectwrap" style="margin-bottom:12px;"><select class="onb-select" onchange="App.setViewLeague(this.value)">'
+    + joined.map(j => '<option value="' + j + '"' + (j === id ? ' selected' : '') + '>' + esc(leagueLabel(j)) + '</option>').join('') + '</select></div>';
+  html += '<div class="lg-hero"><div class="lg-hero-t">' + esc(p.theme.label) + '</div><div class="lg-hero-l">' + p.level.label + ' · ×' + p.level.mult + ' points</div>'
+    + '<div class="arena-stats" style="margin-top:14px;"><div><b>' + fmtN(pr.players) + '</b><span>joueurs</span></div><div><b>' + rank + (rank === 1 ? 'er' : 'e') + '</b><span>ton rang</span></div><div><b>' + daysLeftInSeason() + '</b><span>' + (daysLeftInSeason() > 1 ? 'jours restants' : 'jour restant') + '</span></div></div></div>';
+  html += '<div class="prize-card"><span class="settings-ic">' + tabIcon('<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>') + '</span><div style="flex:1;min-width:0;">'
+    + (pr.unlocked
+      ? '<div class="mode-title">Lot de la saison : ' + esc(pr.prize) + '</div><div class="mode-desc">' + esc(pr.value) + ' (exemple) · pour le podium' + (pr.boosted ? ' · lot renforcé : ligue très active' : '') + '</div>'
+      : '<div class="mode-title">Pas de lot pour l\'instant</div><div class="mode-desc">Il manque ' + fmtN(pr.missing) + ' joueurs pour débloquer « ' + esc(pr.prize) + ' » (seuil : ' + fmtN(pr.min) + ').</div>')
+    + '<div class="goal-bar" style="margin-top:8px;"><div class="goal-fill" style="width:' + Math.min(100, Math.round(pr.players / pr.min * 100)) + '%;"></div></div></div></div>';
+  html += '<div class="rub-meta" style="margin:0 0 10px;">Classement du mois · victoire +' + Math.round(POINTS.win * p.level.mult) + ' pts, égalité +' + Math.round(POINTS.draw * p.level.mult) + ', défaite +' + Math.round(POINTS.loss * p.level.mult) + '. Seuls les duels classés comptent.</div>';
   html += '<div class="settings-group">';
   rows.forEach(function (r, i) {
     const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
-    html += '<div class="league-row' + (r.me ? ' me' : '') + (scope !== 'amis' && i === 5 ? ' cut' : '') + '"><span class="rank">' + medal + '</span>'
-      + '<span class="league-name">' + esc(r.name) + (scope !== 'amis' && i < 5 ? ' <span title="Zone des lots">🎁</span>' : '') + '</span><span class="league-pts">' + r.points + ' pts</span></div>';
+    html += '<div class="league-row' + (r.me ? ' me' : '') + (pr.unlocked && i === 3 ? ' cut' : '') + '"><span class="rank">' + medal + '</span>'
+      + '<span class="league-name">' + esc(r.name) + '</span><span class="league-pts">' + r.points + ' pts</span></div>';
   });
-  html += '</div><div class="rub-meta">Classement de démonstration : les autres joueurs sont fictifs.</div>';
+  html += '</div>';
+  html += '<div class="row" style="margin-top:14px;"><button class="btn ghost" onclick="App.openLeagues()">Explorer les ligues</button><button class="hidebtn" onclick="App.joinLeague(\'' + id + '\')">quitter cette ligue</button></div>';
+  html += '<div class="rub-meta" style="margin-top:12px;">Classement de démonstration : les autres joueurs sont fictifs.</div>';
   return html;
 }
 
@@ -1134,6 +1249,15 @@ function renderPitch() {
     'Partage d\'un paquet avec un camarade en un geste : levier de croissance par le bouche-à-oreille.'
   ]));
 
+  html += pitchSection('2b', 'Multijoueur équitable : les ligues', pitchList([
+    'Un duel sur <b>tes propres cartes</b> avantage celui dont les cartes sont jouées : impossible d\'en faire un classement juste.',
+    'Solution : des <b>ligues par thème</b> (marketing, anglais, gestion de projet…), chacune en 4 niveaux (facile, moyen, difficile, expert). Tout le monde répond aux <b>mêmes questions</b>, tirées d\'une banque commune.',
+    'Les thèmes sont proposés par les utilisateurs, <b>validés par l\'équipe</b>, puis les questions sont préparées par l\'IA et relues.',
+    '<b>Classé</b> (points de ligue, classement mensuel) ou <b>amical</b> (aucun point), plus un <b>salon d\'amis</b> pour jouer à plusieurs.',
+    'Les lots sont débloqués à partir d\'un nombre minimal de joueurs (plus bas pour les niveaux difficiles) et gagnent en valeur quand la ligue est très active.',
+    'Prototype : joueurs, lots et classements simulés ; questions d\'exemple écrites à la main.'
+  ]));
+
   html += pitchSection('3', 'Modèle économique : freemium',
     '<table class="plan-table"><tr><th></th><th>Gratuit</th><th class="pro">Premium</th></tr>'
     + '<tr><td>Cartes et révisions</td><td>illimitées</td><td class="pro">illimitées</td></tr>'
@@ -1148,13 +1272,13 @@ function renderPitch() {
 
   html += pitchSection('4', 'Autres sources de revenus', pitchList([
     '<b>Affiliation</b> : liens vers des cours en ligne pertinents, selon la rubrique de l\'utilisateur.',
-    '<b>Lots sponsorisés</b> : un partenaire finance des lots (places de concert, chèques cadeaux) pour la ligue hebdomadaire.',
+    '<b>Lots sponsorisés</b> : un partenaire finance les lots des ligues actives (cours certifiants, cartes cadeaux). Plus une ligue a de joueurs, plus le lot est valorisé ; pas de lot sous un seuil de joueurs.',
     '<b>Offre établissements</b> (piste) : licence pour une promo ou une association, avec classement interne.'
   ]));
 
   html += pitchSection('5', 'Rétention : les « nudges »', pitchList([
     '<b>Série de jours</b> et objectif quotidien avec barre de progression.',
-    '<b>Preuve sociale</b> : amis, duels, ligue hebdomadaire avec classements général, promo et amis.',
+    '<b>Preuve sociale</b> : amis, duels classés par ligue (thème × niveau), salon d\'amis, saison mensuelle.',
     '<b>Défi du jour</b> : un rendez-vous quotidien, avec points bonus une fois par jour.',
     '<b>Récompenses</b> : points, niveaux, badges, « le saviez-vous ? » quotidien.',
     '<b>Par défaut utile</b> : la répétition espacée décide des cartes du jour à ta place.',
@@ -1171,7 +1295,8 @@ function renderPitch() {
 
   html += pitchSection('7', 'Risques et limites', pitchList([
     '<b>Coût de l\'IA</b> : plafond mensuel, quota par utilisateur, limite de débit.',
-    '<b>Démarrage à froid</b> du multijoueur : peu de joueurs connectés au début, donc duels différés et adversaire simulé.',
+    '<b>Démarrage à froid</b> du multijoueur : peu de joueurs connectés au début, donc duels différés et adversaire simulé ; on ouvre peu de thèmes au départ.',
+    '<b>Triche</b> (recherche web ou IA pendant un quiz) : temps limité, scores vérifiés côté serveur, détection des anomalies ; les lots exigent un compte vérifié.',
     '<b>Données personnelles (RGPD)</b> : comptes, e-mails, suppression à la demande.',
     '<b>Jeux-concours</b> : cadre légal français strict, sponsor et règlement nécessaires.',
     '<b>Qualité de l\'IA</b> : erreurs possibles, d\'où la relecture avant ajout.'

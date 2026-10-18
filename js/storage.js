@@ -5,6 +5,7 @@
 // Tant qu'on n'a pas ajouté de compte + synchronisation en ligne, tes fiches
 // créées sur ton téléphone ne se voient pas automatiquement sur ton ordinateur.
 
+import { allLeagueIds } from './leagues.js';
 import { state, seedData, todayStr, CALM_COLORS, INTERVALS, SPEAK_LANGS, TRASH_DAYS, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS } from './state.js';
 
 const STORAGE_KEY = 'boite-fiches-data-v1';
@@ -70,10 +71,20 @@ export function sanitizeProfile(raw) {
   return p;
 }
 export function sanitizeMulti(raw) {
-  const m = { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 };
+  const m = { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0, joined: [], leagues: {}, seasonKey: '', proposals: [] };
   if (!raw || typeof raw !== 'object') return m;
   ['weekPoints', 'total', 'played', 'wins'].forEach(k => { if (Number.isInteger(raw[k]) && raw[k] >= 0) m[k] = raw[k]; });
   if (typeof raw.weekKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.weekKey)) m.weekKey = raw.weekKey;
+  const valid = new Set(allLeagueIds());
+  if (Array.isArray(raw.joined)) m.joined = raw.joined.filter((id, i, a) => valid.has(id) && a.indexOf(id) === i);
+  if (typeof raw.seasonKey === 'string' && /^\d{4}-\d{2}$/.test(raw.seasonKey)) m.seasonKey = raw.seasonKey;
+  if (raw.leagues && typeof raw.leagues === 'object') {
+    Object.keys(raw.leagues).forEach(function (id) {
+      const l = raw.leagues[id];
+      if (valid.has(id) && l && Number.isInteger(l.points) && l.points >= 0) m.leagues[id] = { points: l.points, played: Number.isInteger(l.played) && l.played >= 0 ? l.played : 0, wins: Number.isInteger(l.wins) && l.wins >= 0 ? l.wins : 0 };
+    });
+  }
+  if (Array.isArray(raw.proposals)) m.proposals = raw.proposals.filter(x => typeof x === 'string' && x.trim()).map(x => x.trim().slice(0, 60)).slice(0, 5);
   return m;
 }
 export function sanitizeSocial(raw) {

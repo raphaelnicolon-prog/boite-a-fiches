@@ -5,9 +5,10 @@
 
 import { state, shuffle, normalize, pickRandom, todayStr, cardsOf, treeCards, rootDeckId, childDecks, allDecksOf, nextDeckOrder, descendantIds, treeNodes, scopedCards, scopedDue, dueCards, allDueCards, scheduleCard, parseBulk, splitBatches, seedData, GOAL_CHOICES, INTERESTS, STUDY_LEVELS, STUDY_FIELDS, STATUSES, WORK_SECTORS, WORK_GOALS, courseChoices, detectField, aiLeft, ensureWeek, APP_VERSION, totalReviews as totalReviewsCount, longestStreak as longestStreakCount } from './state.js';
 import { generateDeck, generateFromText, demoDataset, AI_TOPICS, DEMO_PEOPLE, DAILY_OPPONENT, makeCloze, MOOC_TOPICS } from './demo.js';
-import { eligibleDecks, startDuel, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
+import { eligibleDecks, startDuel, startRoom, stopDuel, answer as duelAnswerFn, pickMatch, setRefresh } from './duel.js';
+import { LEVELS, THEMES, parseLeague, leagueLabel, allLeagueIds, suggestedLeagues, leaguePlayers } from './leagues.js';
 import { loadData, persist, buildBackupJson, parseBackup, EMAIL_RE } from './storage.js';
-import { render, friendResultsHtml, searchResultsHtml, themeRowsHtml } from './render.js';
+import { render, friendResultsHtml, searchResultsHtml, leagueRowsHtml } from './render.js';
 import { enableReorder } from './dragdrop.js';
 
 function refresh() {
@@ -156,6 +157,12 @@ function syncOnbInputs() {
   if (ot !== null) { if (onbStep() === 'work') o.sectorOther = ot.slice(0, 60); else o.fieldOther = ot.slice(0, 60); }
 }
 
+// Ligues cochées pour jouer (parmi celles rejointes) ; toutes les ligues rejointes par défaut.
+function playableLeagues() {
+  const joined = state.multi.joined;
+  return state.multiLeagues ? state.multiLeagues.filter(id => joined.includes(id)) : joined.slice();
+}
+
 // Modes à une carte à la fois cochés pour le Medley (l'appariement est géré à part).
 function medleySingles() {
   return state.medleyModes.filter(m => m !== 'appariement');
@@ -195,19 +202,30 @@ window.App = {
 
   // ---- Multijoueur (prototype : adversaires simulés, voir duel.js) ----
   openMulti() { stopDuel(); state.view = 'multi'; refresh(); },
-  quickMatch() { state.view = 'duel'; startDuel(null); },
+  // « Entrer dans l'arène » : une ligue tirée au hasard parmi celles cochées. Classé = points de ligue ; amical = sans points.
+  quickMatch() {
+    const ids = playableLeagues();
+    if (!ids.length) { this.openLeagues(); return; }
+    state.view = 'duel';
+    startDuel({ league: ids[Math.floor(Math.random() * ids.length)], ranked: state.arenaMode === 'ranked' });
+  },
+  // Entraînement : le duel d'avant, sur tes propres cartes, sans points.
+  trainOwn() { state.view = 'duel'; startDuel({}); },
+  setArenaMode(m) { state.arenaMode = m === 'friendly' ? 'friendly' : 'ranked'; refresh(); },
   duelAnswer(i) { duelAnswerFn(i); },
   duelPickMatch(side, i) { pickMatch(side, i); },
   setLeagueScope(s) { state.leagueScope = s; refresh(); },
   // Défi du jour : un Medley contre « les joueurs du jour » ; le bonus n'est accordé qu'une fois par jour.
   dailyChallenge() {
     state.view = 'duel';
-    startDuel({ opponent: DAILY_OPPONENT, mode: 'medley', skipSearch: true, daily: true });
+    const ids = playableLeagues();
+    startDuel({ opponent: DAILY_OPPONENT, mode: 'medley', skipSearch: true, daily: true, league: ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'culture:facile' });
   },
   duelRematch() {
     const d = state.duel;
     if (!d) return;
-    startDuel({ opponent: d.opponent, deckId: d.deckId, mode: d.mode, skipSearch: true });
+    if (d.room) { startRoom({ league: d.leagueId, mode: d.mode, players: d.others }); return; }
+    startDuel({ opponent: d.opponent, deckId: d.deckId, league: d.leagueId, ranked: d.ranked, mode: d.mode, skipSearch: true });
   },
   openLeague() { stopDuel(); state.view = 'league'; refresh(); },
   openFriends() { stopDuel(); state.view = 'friends'; state.friendQuery = ''; refresh(); },
@@ -233,7 +251,9 @@ window.App = {
     const p = DEMO_PEOPLE.find(x => x.name === name);
     if (!p) return;
     state.view = 'duel';
-    startDuel({ opponent: p });
+    // Défier un ami = combat amical : même banque de questions pour les deux, aucun point.
+    const ids = playableLeagues();
+    startDuel({ opponent: p, ranked: false, league: ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'culture:facile' });
   },
 
   // ---- Assistant IA (simulé : voir demo.js) ----
@@ -356,6 +376,8 @@ window.App = {
         const d = demoDataset();
         state.rubriques = d.rubriques; state.decks = d.decks; state.cards = d.cards;
         state.stats = d.stats; state.multi = d.multi; state.social = d.social;
+        state.multi.joined = ['marketing:moyen', 'anglais:facile', 'projet:moyen']; state.multi.leagues = { 'marketing:moyen': { points: 60, played: 3, wins: 2 } }; state.multi.seasonKey = ''; state.multi.proposals = [];
+        state.multiLeagues = null;
         state.meta = { premium: false, aiDays: {}, aiTotal: 0, welcomed: true, interests: state.meta.interests || [], haptics: state.meta.haptics, reminder: state.meta.reminder };
         state.trash = []; state.view = 'home'; state.session = null; state.reorderMode = false;
         persist(); refresh();
@@ -564,35 +586,78 @@ window.App = {
     state.multiModes = ['medley', 'qcm', 'vf', 'match'].filter(x => cur.has(x));
     refresh();
   },
-  toggleMultiTheme(id) {
-    const ok = eligibleDecks().map(d => d.id);
-    const cur = new Set(state.multiThemes || ok);
-    const branch = descendantIds(id).filter(x => ok.includes(x));
-    const full = branch.every(x => cur.has(x));
-    branch.forEach(x => { if (full) cur.delete(x); else cur.add(x); });
-    if (cur.size === 0) return;
-    state.multiThemes = cur.size === ok.length ? null : ok.filter(x => cur.has(x));
+  // ---- Ligues (thèmes communs à tous les joueurs, par niveau) ----
+  toggleMultiLeague(id) {
+    const joined = state.multi.joined.slice();
+    const cur = new Set(state.multiLeagues || joined);
+    if (cur.has(id)) { if (cur.size === 1) return; cur.delete(id); } else cur.add(id);
+    state.multiLeagues = joined.every(x => cur.has(x)) ? null : joined.filter(x => cur.has(x));
     refresh();
   },
-  allMultiThemes() { state.multiThemes = null; refresh(); },
-  // Coche / décoche tous les paquets jouables d'une rubrique d'un coup.
-  toggleMultiRubrique(rid) {
-    const ok = eligibleDecks().map(d => d.id);
-    const ids = allDecksOf(rid).map(d => d.id).filter(id => ok.includes(id));
-    if (!ids.length) return;
-    const cur = new Set(state.multiThemes || ok);
-    const full = ids.every(id => cur.has(id));
-    ids.forEach(id => { if (full) cur.delete(id); else cur.add(id); });
-    if (cur.size === 0) return;
-    state.multiThemes = cur.size === ok.length ? null : ok.filter(id => cur.has(id));
-    refresh();
+  allMultiLeagues() { state.multiLeagues = null; refresh(); },
+  openLeagues() { stopDuel(); state.view = 'leagues'; state.dropOpen = null; refresh(); window.scrollTo(0, 0); },
+  joinLeague(id) {
+    if (!parseLeague(id)) return;
+    const j = state.multi.joined;
+    if (j.includes(id)) state.multi.joined = j.filter(x => x !== id); else state.multi.joined = j.concat(id);
+    state.multiLeagues = null; // la sélection repart de « toutes mes ligues »
+    if (!state.viewLeague || !state.multi.joined.includes(state.viewLeague)) state.viewLeague = state.multi.joined[0] || '';
+    persist(); refresh();
   },
   // Pas de refresh() complet : il ferait perdre le focus de la barre de recherche.
-  searchThemes(q) {
+  searchLeagues(q) {
     state.themeQuery = q;
-    const el = document.getElementById('theme-rows');
-    if (el) el.innerHTML = themeRowsHtml(q);
+    const el = document.getElementById('league-rows');
+    if (el) el.innerHTML = leagueRowsHtml(q);
   },
+  setViewLeague(id) { if (state.multi.joined.includes(id)) { state.viewLeague = id; refresh(); } },
+  openProposal() { state.showProposal = true; refresh(); },
+  saveProposal() {
+    const el = document.getElementById('proposal-name');
+    const name = el ? el.value.trim().slice(0, 60) : '';
+    if (!name) return;
+    state.multi.proposals = [name].concat(state.multi.proposals.filter(x => x !== name)).slice(0, 5);
+    state.showProposal = false;
+    persist(); refresh();
+  },
+
+  // ---- Salon d'amis : un combat amical à plusieurs, sans points ----
+  openRoom() {
+    stopDuel();
+    const ids = playableLeagues();
+    const code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]).join('');
+    state.room = { code, league: ids[0] || 'culture:facile', players: [], pending: [] };
+    state.view = 'room'; refresh(); window.scrollTo(0, 0);
+  },
+  roomLeague(id) { if (state.room && parseLeague(id)) { state.room.league = id; refresh(); } },
+  // L'invité (simulé) accepte au bout d'un instant et rejoint le salon.
+  roomInvite(name) {
+    const r = state.room, p = DEMO_PEOPLE.find(x => x.name === name);
+    if (!r || !p || r.players.some(x => x.name === name) || r.pending.includes(name)) return;
+    r.pending.push(name);
+    refresh();
+    setTimeout(function () {
+      if (state.room !== r) return;
+      r.pending = r.pending.filter(x => x !== name);
+      r.players.push({ name: p.name, level: p.level });
+      if (state.view === 'room') refresh();
+    }, 900 + Math.random() * 900);
+  },
+  roomRemove(name) { if (state.room) { state.room.players = state.room.players.filter(x => x.name !== name); refresh(); } },
+  async roomShare() {
+    const r = state.room;
+    if (!r) return;
+    const text = 'Rejoins mon salon sur Boîte à Fiches : code ' + r.code;
+    try { if (navigator.share) { await navigator.share({ title: 'Salon Boîte à Fiches', text, url: location.origin + location.pathname }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(text); askConfirm({ title: 'Code copié', body: 'Envoie « ' + r.code + ' » à tes amis (démo : les invités sont simulés).', label: '' }); } catch (e) { /* tant pis */ }
+  },
+  roomStart() {
+    const r = state.room;
+    if (!r || r.players.length < 1) return;
+    state.view = 'duel';
+    startRoom({ league: r.league, players: r.players });
+  },
+  leaveRoom() { state.room = null; this.openMulti(); },
 
   // ---- Cartes ----
   openCards() { state.view = 'cards'; refresh(); },
@@ -769,6 +834,9 @@ window.App = {
       const have = state.decks.some(d => d.rubriqueId === rr.id && (normalize(d.name) === normalize(c) || (topic && topic === MOOC_TOPICS.find(x => x.test.test(normalize(d.name))))));
       if (!have) state.decks.push({ id: 'd-' + Date.now() + '-c' + k, name: c, rubriqueId: rr.id, speakLang: '', order: nextDeckOrder(rr.id, null) });
     });
+    // Ligues proposées d'après les matières et langues choisies (niveau moyen) : on les rejoint d'office.
+    const texts = o.courses.map(normalize).concat(INTERESTS.filter(i => o.interests.includes(i.id)).map(i => normalize(i.label)));
+    suggestedLeagues(texts).forEach(id => { if (!state.multi.joined.includes(id)) state.multi.joined.push(id); });
     // Hors études, les cours d'exemple de « Spécial Révisions » ne servent à rien : on les masque (réversible via Réorganiser).
     if (first && o.status && o.status !== 'student') {
       const ex = state.rubriques.find(r => r.id === 'r-revisions');

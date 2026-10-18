@@ -2,7 +2,7 @@
 // fois qu'elle a été ouverte au moins une fois. Change CACHE_VERSION quand tu
 // modifies les fichiers ci-dessous, pour forcer les téléphones à récupérer
 // la nouvelle version au lieu de garder l'ancienne en cache indéfiniment.
-const CACHE_VERSION = 'v46';
+const CACHE_VERSION = 'v47';
 const CACHE_NAME = 'boite-a-fiches-' + CACHE_VERSION;
 
 const APP_SHELL = [
@@ -17,6 +17,7 @@ const APP_SHELL = [
   './js/dragdrop.js',
   './js/demo.js',
   './js/duel.js',
+  './js/leagues.js',
   './icons/icon-192.png',
   './icons/icon-512.png'
 ];

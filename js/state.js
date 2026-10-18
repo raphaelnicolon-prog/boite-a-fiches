@@ -2,7 +2,7 @@
 // Rien ici n'affiche quoi que ce soit à l'écran : c'est juste "la mémoire" du programme.
 
 // Numéro de version affiché dans les Réglages : à garder identique à CACHE_VERSION (service-worker.js).
-export const APP_VERSION = '46';
+export const APP_VERSION = '47';
 
 export const INTERVALS = [0, 1, 3, 7, 16, 30]; // en jours, façon Leitner
 
@@ -63,7 +63,7 @@ export const state = {
   feedbackRating: 0,
   openArticle: null,       // article ouvert dans « Découvrir »
   updateReady: false,      // une nouvelle version de l'appli est prête (voir app.js)
-  multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0 }, // points de ligue du joueur
+  multi: { weekKey: '', weekPoints: 0, total: 0, played: 0, wins: 0, joined: [], leagues: {}, seasonKey: '', proposals: [] }, // points d'arène + ligues rejointes (par thème et niveau)
   social: { friends: [], pending: {} }, // amis (démo) ; 'pending' = demandes en attente, non sauvegardées
   friendQuery: '',      // texte de la recherche d'amis
   createRubriqueId: null, // rubrique choisie dans l'onglet « Créer »
@@ -71,9 +71,13 @@ export const state = {
   newDeckParentId: null, // paquet dans lequel on crée un sous-paquet (null = directement dans la rubrique)
   dropOpen: null,        // liste déroulante ouverte (voir dropdown() dans render.js)
   medleyModes: ['flash', 'qcm', 'texte', 'appariement'], // modes mélangés dans le Quizz Medley
-  themeQuery: '',        // recherche dans la liste des thèmes du multijoueur
-  multiThemes: null,     // thèmes des duels cochés : null = tous, sinon liste d'ids de paquets
-  multiModes: ['medley', 'qcm', 'vf', 'match'], // formats de duel cochés (un est tiré au hasard)
+  themeQuery: '',        // recherche dans le catalogue des ligues
+  multiLeagues: null,    // ligues cochées pour jouer : null = toutes celles rejointes, sinon liste d'identifiants
+  multiModes: ['medley', 'qcm', 'vf'], // formats de duel cochés (un est tiré au hasard)
+  arenaMode: 'ranked',   // 'ranked' (points de ligue) ou 'friendly' (combat amical, sans points)
+  room: null,            // salon d'amis en préparation (voir app.js)
+  viewLeague: '',        // ligue affichée dans l'onglet Ligue
+  showProposal: false,   // fenêtre « Proposer un thème »
   leagueScope: 'general', // cercle du classement : 'general', 'amis' ou 'promo'
   ai: null,             // assistant IA en cours (formulaire, chargement, relecture)
   duel: null,           // partie multijoueur en cours (voir duel.js)
